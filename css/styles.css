@@ -16,14 +16,26 @@
    ============================================================= */
 
 /* ===== 0. 设计令牌 ===== */
-:root {
+/* 深色为默认主题；浅色在文件末尾的 [data-theme="light"] 里整体覆盖。
+   组件样式只允许引用这里的变量，不要写死颜色——否则浅色模式会漏改。 */
+:root,
+[data-theme="dark"] {
   /* 配色：深夜蓝底 + 香槟金主色 */
   --bg:            #080b14;
-  --bg-soft:       #0d1120;
   --surface:       rgba(255, 255, 255, 0.045);
   --surface-strong:rgba(255, 255, 255, 0.075);
+  --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.022));
   --border:        rgba(255, 255, 255, 0.10);
   --border-strong: rgba(255, 255, 255, 0.18);
+  /* 供币面描边等用途的白色/黑色半透明层，浅色模式下要反过来 */
+  --ink-weak:      rgba(255, 255, 255, 0.16);
+  --ink-strong:    rgba(255, 255, 255, 0.22);
+
+  /* 页面氛围光（三处径向渐变） */
+  --glow-gold:     rgba(242, 199, 92, 0.13);
+  --glow-jade:     rgba(88, 224, 184, 0.10);
+  --glow-violet:   rgba(126, 116, 255, 0.12);
+  --topbar-bg:     linear-gradient(to bottom, rgba(8, 11, 20, 0.92), rgba(8, 11, 20, 0.62));
 
   --text:          #eef2ff;
   --text-soft:     #aab3cc;
@@ -35,12 +47,39 @@
   --rose:          #ff8098;
   --danger:        #ff6b81;
 
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-deep: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --shadow-gold: 0 12px 30px rgba(242, 199, 92, 0.28);
+  --shadow-gold-hover: 0 16px 36px rgba(242, 199, 92, 0.38);
+  --shadow-panel-stage:
+    var(--shadow-panel-stage);
+  --toast-bg:      rgba(16, 21, 36, 0.95);
+  --kbd-bg:        rgba(0, 0, 0, 0.22);
+  /* 金色（主色）的半透明层：边框、选中卡片、标签、图表条 */
+  --gold-soft:     rgba(242, 199, 92, 0.10);
+  --gold-line:     rgba(242, 199, 92, 0.35);
+  --gold-line-strong: rgba(242, 199, 92, 0.55);
+  --gold-fill:     linear-gradient(135deg, rgba(242, 199, 92, 0.18), rgba(242, 199, 92, 0.05));
+  --gold-glow:     0 10px 26px rgba(242, 199, 92, 0.12);
+  --gold-text-glow: 0 0 26px rgba(242, 199, 92, 0.45);
+  --jade-soft:     rgba(88, 224, 184, 0.14);
+  --jade-line:     rgba(88, 224, 184, 0.32);
+  --jade-text-glow: 0 0 26px rgba(88, 224, 184, 0.35);
+  --chip-track:    rgba(255, 255, 255, 0.07);
+  --switch-off:    rgba(255, 255, 255, 0.13);
+  --switch-knob:   #cfd6e6;
+  --switch-on:     rgba(242, 199, 92, 0.35);
+  --switch-on-line:rgba(242, 199, 92, 0.6);
+  --face-ring:     rgba(0, 0, 0, 0.14);
+  --coin-edge:     #6b4c0d;
+  --face-shade:    rgba(0, 0, 0, 0.22);
+  --face-drop:     rgba(0, 0, 0, 0.42);
+  --sheen:         rgba(255, 255, 255, 0.55);
+  --inset-plate:   rgba(255, 255, 255, 0.02);
+
   --radius-sm: 10px;
   --radius:    16px;
   --radius-lg: 24px;
-
-  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --shadow-deep: 0 24px 60px rgba(0, 0, 0, 0.55);
 
   --font: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
           "Noto Sans SC", system-ui, -apple-system, sans-serif;
@@ -48,6 +87,63 @@
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* ---- 浅色主题：本地时间 08:00–17:59 为默认，也可手动固定 ---- */
+[data-theme="light"] {
+  --bg:            #f2f4f9;
+  --surface:       rgba(19, 26, 46, 0.040);
+  --surface-strong:rgba(19, 26, 46, 0.075);
+  --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.62));
+  --border:        rgba(19, 26, 46, 0.12);
+  --border-strong: rgba(19, 26, 46, 0.22);
+  --ink-weak:      rgba(0, 0, 0, 0.05);
+  --ink-strong:    rgba(0, 0, 0, 0.09);
+
+  --glow-gold:     rgba(214, 158, 30, 0.16);
+  --glow-jade:     rgba(24, 150, 120, 0.12);
+  --glow-violet:   rgba(96, 84, 220, 0.10);
+  --topbar-bg:     linear-gradient(to bottom, rgba(242, 244, 249, 0.94), rgba(242, 244, 249, 0.68));
+
+  --text:          #151b2e;
+  --text-soft:     #48536e;
+  --text-dim:      #6f7b96;
+
+  --gold:          #a97313;
+  --gold-deep:     #7d540a;
+  --jade:          #10745f;
+  --rose:          #c2415c;
+  --danger:        #c62842;
+
+  --shadow-soft: 0 8px 24px rgba(24, 34, 62, 0.10);
+  --shadow-deep: 0 20px 50px rgba(24, 34, 62, 0.20);
+  --shadow-gold: 0 10px 24px rgba(214, 158, 30, 0.32);
+  --shadow-gold-hover: 0 14px 30px rgba(214, 158, 30, 0.42);
+  --shadow-panel-stage:
+    radial-gradient(600px 320px at 50% -10%, rgba(214, 158, 30, 0.16), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.70));
+  --toast-bg:      rgba(255, 255, 255, 0.97);
+  --kbd-bg:        rgba(19, 26, 46, 0.10);
+  --gold-soft:     rgba(214, 158, 30, 0.14);
+  --gold-line:     rgba(190, 138, 20, 0.42);
+  --gold-line-strong: rgba(170, 120, 12, 0.62);
+  --gold-fill:     linear-gradient(135deg, rgba(214, 158, 30, 0.22), rgba(214, 158, 30, 0.07));
+  --gold-glow:     0 10px 22px rgba(190, 138, 20, 0.16);
+  --gold-text-glow: 0 0 20px rgba(190, 138, 20, 0.25);
+  --jade-soft:     rgba(24, 150, 120, 0.16);
+  --jade-line:     rgba(24, 150, 120, 0.38);
+  --jade-text-glow: 0 0 20px rgba(24, 150, 120, 0.20);
+  --chip-track:    rgba(19, 26, 46, 0.08);
+  --switch-off:    rgba(19, 26, 46, 0.16);
+  --switch-knob:   #ffffff;
+  --switch-on:     rgba(214, 158, 30, 0.40);
+  --switch-on-line:rgba(170, 120, 12, 0.65);
+  --face-ring:     rgba(60, 40, 0, 0.13);
+  --coin-edge:     #9a6d12;
+  --face-shade:    rgba(60, 40, 0, 0.10);
+  --face-drop:     rgba(60, 40, 0, 0.18);
+  --sheen:         rgba(255, 255, 255, 0.70);
+  --inset-plate:   rgba(19, 26, 46, 0.028);
 }
 
 /* ===== 1. 基础重置 ===== */
@@ -60,9 +156,9 @@ body {
   font-family: var(--font);
   color: var(--text);
   background:
-    radial-gradient(1200px 700px at 15% -10%, rgba(242, 199, 92, 0.13), transparent 60%),
-    radial-gradient(900px 600px at 92% 8%,  rgba(88, 224, 184, 0.10), transparent 60%),
-    radial-gradient(700px 700px at 50% 120%, rgba(126, 116, 255, 0.12), transparent 65%),
+    radial-gradient(1200px 700px at 15% -10%, var(--glow-gold), transparent 60%),
+    radial-gradient(900px 600px at 92% 8%,  var(--glow-jade), transparent 60%),
+    radial-gradient(700px 700px at 50% 120%, var(--glow-violet), transparent 65%),
     var(--bg);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
@@ -77,7 +173,7 @@ code {
   font-size: 0.85em;
   padding: 1px 6px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--ink-weak);
   color: var(--gold);
 }
 
@@ -97,7 +193,7 @@ code {
   justify-content: space-between;
   gap: 16px;
   padding: 14px clamp(16px, 4vw, 34px);
-  background: linear-gradient(to bottom, rgba(8, 11, 20, 0.92), rgba(8, 11, 20, 0.62));
+  background: var(--topbar-bg);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
 }
@@ -111,7 +207,7 @@ code {
   place-items: center;
   border-radius: 50%;
   background: radial-gradient(circle at 32% 26%, #ffeaa7, var(--gold) 42%, var(--gold-deep));
-  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18), 0 6px 18px rgba(242, 199, 92, 0.28);
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18), var(--shadow-gold);
   color: #4a3405;
   font-weight: 800;
   font-size: 18px;
@@ -128,8 +224,8 @@ code {
   font-size: 12px;
   padding: 5px 11px;
   border-radius: 999px;
-  border: 1px solid rgba(242, 199, 92, 0.35);
-  background: rgba(242, 199, 92, 0.10);
+  border: 1px solid var(--gold-line);
+  background: var(--gold-soft);
   color: var(--gold);
   white-space: nowrap;
 }
@@ -203,9 +299,9 @@ code {
   background: var(--surface-strong);
 }
 .mode-card[aria-current="true"] {
-  border-color: rgba(242, 199, 92, 0.55);
-  background: linear-gradient(135deg, rgba(242, 199, 92, 0.18), rgba(242, 199, 92, 0.05));
-  box-shadow: 0 10px 26px rgba(242, 199, 92, 0.12);
+  border-color: var(--gold-line-strong);
+  background: var(--gold-fill);
+  box-shadow: var(--gold-glow);
 }
 .mode-card[disabled] { opacity: 0.5; cursor: not-allowed; }
 
@@ -218,7 +314,7 @@ code {
   font-size: 10px;
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--ink-strong);
   color: var(--text-dim);
   flex: none;
 }
@@ -265,7 +361,7 @@ code {
 .panel {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.022));
+  background: var(--surface-panel);
   box-shadow: var(--shadow-soft);
   padding: clamp(18px, 2.6vw, 28px);
 }
@@ -274,8 +370,7 @@ code {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(600px 320px at 50% -10%, rgba(242, 199, 92, 0.13), transparent 70%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+    var(--shadow-panel-stage);
 }
 
 .btn {
@@ -301,8 +396,8 @@ code {
   font-size: 10.5px;
   padding: 2px 6px;
   border-radius: 5px;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--kbd-bg);
+  border: 1px solid var(--ink-strong);
   color: inherit;
   opacity: 0.85;
 }
@@ -311,11 +406,11 @@ code {
   border-color: transparent;
   background: linear-gradient(135deg, #ffe08a, var(--gold) 45%, #d79f2c);
   color: #402d04;
-  box-shadow: 0 12px 30px rgba(242, 199, 92, 0.28);
+  box-shadow: var(--shadow-gold);
 }
 .btn--primary:hover:not([disabled]) {
   background: linear-gradient(135deg, #ffeaa7, #f6cf6d 45%, #e0a733);
-  box-shadow: 0 16px 36px rgba(242, 199, 92, 0.38);
+  box-shadow: var(--shadow-gold-hover);
 }
 .btn--mid { min-width: 128px; }
 .btn--sm { padding: 9px 16px; font-size: 13px; }
@@ -330,7 +425,7 @@ code {
   padding: 12px 22px;
   border-radius: 999px;
   border: 1px solid var(--border-strong);
-  background: rgba(16, 21, 36, 0.95);
+  background: var(--toast-bg);
   box-shadow: var(--shadow-deep);
   font-size: 14px;
   opacity: 0;
@@ -365,8 +460,8 @@ code {
 
 .stage__status[data-state="idle"] .stage__status-main { color: var(--text-soft); font-size: clamp(18px, 2.6vw, 22px); }
 .stage__status[data-state="flipping"] .stage__status-main { color: var(--gold); }
-.stage__status[data-state="heads"] .stage__status-main { color: var(--gold); text-shadow: 0 0 26px rgba(242, 199, 92, 0.45); }
-.stage__status[data-state="tails"] .stage__status-main { color: var(--jade); text-shadow: 0 0 26px rgba(88, 224, 184, 0.35); }
+.stage__status[data-state="heads"] .stage__status-main { color: var(--gold); text-shadow: var(--gold-text-glow); }
+.stage__status[data-state="tails"] .stage__status-main { color: var(--jade); text-shadow: var(--jade-text-glow); }
 
 /* 落定闪光 */
 .stage__status[data-state="heads"] .stage__status-main,
@@ -431,13 +526,22 @@ code {
      由 JS 按角度切换币面，任何渲染器下结果都一致。 */
 }
 
-/* 上/下两个图层错开约 3%，边缘露出的一点底色就是硬币的「厚度」 */
+/* 图层：铺满整枚硬币的定位容器。
+   这里的 border-radius 是必须的：硬币厚度用 box-shadow 绘制，
+   而 box-shadow 跟随的是「本元素」的圆角；容器不带圆角就会画成一条方块状的杠。 */
 .coin__layer {
   position: absolute;
   inset: 0;
+  border-radius: 50%;
 }
-.coin__layer--top    { transform: translateY(-1.6%); }
-.coin__layer--bottom { transform: translateY(1.6%); }
+
+/* 硬币厚度：上层靠 box-shadow 在下方露出一线实体边缘色。
+   之前是叠一个「另一面颜色」的下层来模拟厚度，但金色币面下方露出青色会像镶边，
+   所以改用随主题变化的 --coin-edge，并且它会随 JS 写入的 --coin-k 一起收放。 */
+.coin__layer--top {
+  box-shadow: 0 calc(2.5px * var(--coin-k, 1)) 0 var(--coin-edge);
+}
+.coin__layer--top.coin__layer--blur { box-shadow: none; }
 
 /* 高速旋转时叠在上面的动态模糊层（自带 filter，与清晰层分离，互不干扰） */
 .coin__layer--blur {
@@ -464,12 +568,14 @@ code {
   gap: 2px;
   overflow: hidden;
   box-shadow:
-    inset 0 0 0 5px rgba(0, 0, 0, 0.14),
-    inset 0 -14px 26px rgba(0, 0, 0, 0.22),
-    0 16px 34px rgba(0, 0, 0, 0.42);
+    inset 0 0 0 5px var(--face-ring),
+    inset 0 -14px 26px var(--face-shade),
+    0 16px 34px var(--face-drop);
 }
-/* 模糊层里的币面是虚影，不再投阴影 */
-.coin__layer--blur .coin__face { box-shadow: inset 0 0 0 4px rgba(0, 0, 0, 0.10); }
+/* 模糊层里的币面是虚影，只留内圈描边 */
+.coin__layer--blur .coin__face { box-shadow: inset 0 0 0 4px var(--face-ring); }
+/* 下层只负责露出「厚度」那一线底色；它自身若带投影，会在硬币下方形成一圈脏边 */
+.coin__layer--bottom .coin__face { box-shadow: none; }
 
 /* 币面细节：内圈 + 齿边 */
 .coin__face::before {
@@ -478,7 +584,7 @@ code {
   inset: 9%;
   border-radius: 50%;
   border: 2px dashed rgba(0, 0, 0, 0.20);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 0 0 1px var(--ink-strong);
 }
 .face-marks {
   position: absolute;
@@ -487,7 +593,7 @@ code {
   background:
     repeating-conic-gradient(from 0deg,
       rgba(0, 0, 0, 0.14) 0deg 3deg,
-      rgba(255, 255, 255, 0.16) 3deg 6deg);
+      var(--ink-weak) 3deg 6deg);
   -webkit-mask: radial-gradient(circle, transparent 89%, #000 90%);
           mask: radial-gradient(circle, transparent 89%, #000 90%);
   opacity: 0.85;
@@ -532,7 +638,7 @@ code {
   content: "";
   position: absolute;
   inset: -30%;
-  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.55) 50%, transparent 62%);
+  background: linear-gradient(115deg, transparent 38%, var(--sheen) 50%, transparent 62%);
   animation: sheen 0.85s var(--ease-out);
 }
 @keyframes sheen {
@@ -548,7 +654,7 @@ code {
   width: min(340px, 74%);
   height: 2px;
   border-radius: 2px;
-  background: linear-gradient(90deg, transparent, rgba(242, 199, 92, 0.45), transparent);
+  background: linear-gradient(90deg, transparent, var(--gold-line), transparent);
 }
 
 .stage__actions {
@@ -596,7 +702,7 @@ code {
   height: 12px;
   border-radius: 999px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--chip-track);
   display: flex;
   border: 1px solid var(--border);
 }
@@ -645,8 +751,8 @@ code {
   animation: chipIn .3s var(--ease-out);
 }
 @keyframes chipIn { from { transform: scale(0.7); opacity: 0; } }
-.chip--heads { background: rgba(242, 199, 92, 0.16); color: var(--gold); border-color: rgba(242, 199, 92, 0.36); }
-.chip--tails { background: rgba(88, 224, 184, 0.14); color: var(--jade); border-color: rgba(88, 224, 184, 0.32); }
+.chip--heads { background: var(--gold-soft); color: var(--gold); border-color: var(--gold-line); }
+.chip--tails { background: var(--jade-soft); color: var(--jade); border-color: var(--jade-line); }
 .chip--empty { color: var(--text-dim); border-style: dashed; background: none; }
 
 /* 熵源面板 */
@@ -655,7 +761,7 @@ code {
   padding: 16px 18px;
   border-radius: var(--radius);
   border: 1px dashed var(--border-strong);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--inset-plate);
 }
 .entropy__title { font-size: 12.5px; color: var(--text-soft); margin-bottom: 10px; }
 .entropy__row {
@@ -672,7 +778,34 @@ code {
 .entropy__row b { color: var(--text-soft); font-weight: 600; }
 
 /* ===== 8. 通用设置面板 ===== */
-.settings { display: flex; flex-wrap: wrap; gap: 10px 26px; margin-top: 22px; justify-content: center; }
+.settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+  margin-top: 22px;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 设置项：左侧标签 + 右侧控件 */
+.setting-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.setting-item__label { font-size: 13px; color: var(--text-soft); }
+
+/* 主题按钮：点按循环「跟随时间 → 浅色 → 深色」，切换时图标闪一下作为反馈 */
+.theme-btn[data-changed] .icon-btn__icon { animation: themePop .45s var(--ease-out); }
+.theme-btn[data-mode="light"],
+.theme-btn[data-mode="dark"] { border-color: var(--gold-line); color: var(--gold); }
+@keyframes themePop {
+  0%   { transform: scale(0.6) rotate(-25deg); opacity: 0.4; }
+  60%  { transform: scale(1.18) rotate(8deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.theme-btn--inline { padding: 6px 12px; }
+.theme-btn--inline .icon-btn__text { font-size: 12.5px; }
 
 .switch {
   display: inline-flex;
@@ -687,7 +820,7 @@ code {
 .switch__track {
   width: 38px; height: 21px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.13);
+  background: var(--switch-off);
   border: 1px solid var(--border);
   position: relative;
   transition: background .22s, border-color .22s;
@@ -699,10 +832,10 @@ code {
   top: 2px; left: 2px;
   width: 15px; height: 15px;
   border-radius: 50%;
-  background: #cfd6e6;
+  background: var(--switch-knob);
   transition: transform .22s var(--ease-out), background .22s;
 }
-.switch input:checked + .switch__track { background: rgba(242, 199, 92, 0.35); border-color: rgba(242, 199, 92, 0.6); }
+.switch input:checked + .switch__track { background: var(--switch-on); border-color: var(--switch-on-line); }
 .switch input:checked + .switch__track::after { transform: translateX(17px); background: var(--gold); }
 .switch input:focus-visible + .switch__track { outline: 2px solid var(--gold); outline-offset: 2px; }
 
@@ -712,7 +845,7 @@ code {
   padding: 56px 24px;
   border-radius: var(--radius-lg);
   border: 1px dashed var(--border-strong);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--inset-plate);
 }
 .placeholder__icon { font-size: 44px; }
 .placeholder h2 { margin-top: 14px; font-size: 20px; }

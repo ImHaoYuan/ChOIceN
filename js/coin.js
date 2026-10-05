@@ -52,13 +52,11 @@
     const coinEl = document.createElement('div');
     coinEl.className = 'coin';
     coinEl.innerHTML =
-      '<div class="coin__layer coin__layer--bottom">' + layerMarkup() + '</div>' +
       '<div class="coin__layer coin__layer--top">' + layerMarkup() + '</div>' +
       '<div class="coin__layer coin__layer--top coin__layer--blur">' + layerMarkup() + '</div>';
 
-    const bottom = coinEl.children[0];
-    const sharp = coinEl.children[1];
-    const blur = coinEl.children[2];
+    const sharp = coinEl.children[0];
+    const blur = coinEl.children[1];
     const sharpFaces = { heads: sharp.children[0], tails: sharp.children[1] };
     const blurFaces = { heads: blur.children[0], tails: blur.children[1] };
 
@@ -76,8 +74,7 @@
     let lastAngle = 0;
     let lastNow = 0;
     let lastBlur = -1;
-    let bottomFace = null;
-    let topFace = null;
+    let lastFacing = null;
 
     function norm(deg) { return ((deg % 360) + 360) % 360; }
 
@@ -102,20 +99,17 @@
 
       coinEl.style.transform =
         'translate3d(0,' + (-lift).toFixed(2) + 'px,0) scaleY(' + scaleY.toFixed(4) + ')';
+      // 厚度（侧面那一线）跟着压扁一起收放，避免被拉成一条粗边
+      coinEl.style.setProperty('--coin-k', scaleY.toFixed(3));
 
-      // 清晰层：按角度切换币面
-      if (facing !== topFace) {
-        topFace = facing;
+      // 币面切换：按角度显式切换，不依赖渲染器的背面剔除
+      if (facing !== lastFacing) {
+        lastFacing = facing;
         setVisible(sharpFaces, facing);
-      }
-      // 下层的币面与上层相反，压扁时从边缘露出的一线即为硬币厚度
-      const under = facing === 'heads' ? 'tails' : 'heads';
-      if (under !== bottomFace) {
-        bottomFace = under;
-        setVisible({ heads: bottom.children[0], tails: bottom.children[1] }, under);
+        setVisible(blurFaces, facing);
       }
 
-      // 模糊层：同一个朝向下叠加残影
+      // 模糊层：按角速度调模糊量与不透明度（朝向已在上方与清晰层同步）
       if (blurAmount !== lastBlur) {
         lastBlur = blurAmount;
         blur.style.filter = blurAmount > 0.02 ? 'blur(' + blurAmount.toFixed(2) + 'px)' : 'none';
@@ -123,7 +117,6 @@
           ? Math.min(0.85, 0.2 + (blurAmount / BLUR_PEAK) * 0.55).toFixed(3)
           : '0';
       }
-      setVisible(blurFaces, facing);
 
       // 阴影随高度收缩、变淡
       const near = 1 - Math.min(lift / (LIFT_RATIO * 4.2), 0.55);

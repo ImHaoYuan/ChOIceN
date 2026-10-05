@@ -7,6 +7,36 @@
 <meta name="theme-color" content="#0b0f1a" />
 <title>ChOIceN · 让随机帮你做决定</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23f0c34d'/%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23a87c1c' stroke-width='2'/%3E%3C/svg%3E" />
+
+<!-- 首屏防闪：必须在样式表之前决定主题，否则会先渲染深色再跳成浅色。
+     判定规则与 js/theme.js 的 themeByTime() 必须一致：
+       本地时间 08:00–17:59 → 浅色，其余 → 深色；
+       ?theme=light|dark|auto 的覆盖优先；
+       其次以用户手动选过的「始终浅色 / 始终深色」偏好为准。 -->
+<script>
+(function () {
+  try {
+    var saved = null;
+    try {
+      var raw = localStorage.getItem('choicen.v1.settings');
+      if (raw) saved = (JSON.parse(raw) || {}).theme;
+    } catch (e) { /* 隐私模式等场景下忽略 */ }
+    var forced = /[?&]theme=(light|dark|auto)\b/.exec(location.search);
+    forced = forced ? forced[1] : null;
+    var pref = forced || saved;
+    var h = new Date().getHours();
+    var theme = (pref === 'light' || pref === 'dark')
+      ? pref
+      : ((h >= 8 && h < 18) ? 'light' : 'dark');
+    var root = document.documentElement;
+    root.setAttribute('data-theme', theme);
+    root.style.colorScheme = theme;      // 顺带切换原生滚动条/控件配色
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'light' ? '#f2f4f9' : '#0b0f1a');
+  } catch (e) {}
+})();
+</script>
+
 <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
@@ -26,7 +56,11 @@
   <nav class="topbar__nav" aria-label="功能分类">
     <span class="tag" data-i18n="topbar.randomSource">随机源</span>
     <span class="tag tag--ghost">时间 · Time</span>
-    <button id="soundToggle" class="icon-btn" type="button" aria-pressed="true" title="音效开关 (M)">
+    <button id="themeToggle" class="icon-btn" type="button" title="主题：跟随时间 / 浅色 / 深色（点按循环切换）">
+      <span class="icon-btn__icon" id="themeIcon" aria-hidden="true">⏱️</span>
+      <span class="icon-btn__text" id="themeText">跟随时间</span>
+    </button>
+    <button id="soundToggle" class="icon-btn" type="button" aria-pressed="true" title="音效开关">
       <span class="icon-btn__icon" id="soundIcon" aria-hidden="true">🔊</span>
       <span class="icon-btn__text" data-i18n="topbar.sound">音效</span>
     </button>
@@ -61,6 +95,7 @@
 <script src="js/rng.js"></script>
 <script src="js/store.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/theme.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/coin.js"></script>
 <script src="js/modes.js"></script>

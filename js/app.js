@@ -17,6 +17,77 @@
   let cleanup = null;        // 上一个视图的清理函数
   let settings = App.store.getSettings();
 
+  /** 主题按钮的文案：模式名 + 当前实际生效的外观 */
+  function themeLabel(modeValue) {
+    const info = App.theme.label(modeValue == null ? App.theme.getMode() : modeValue);
+    const resolved = App.theme.get() === 'light' ? '浅色' : '深色';
+    return info.name + ' · 当前' + resolved;
+  }
+
+  /**
+   * 创建主题按钮。顶部栏与设置面板各一个，共用同一套逻辑；
+   * data-mode 用于让 CSS 在模式变化时重放一次强调动画。
+   */
+  function createThemeButton(extraClass) {
+    const btn = el('button', {
+      type: 'button',
+      class: 'icon-btn theme-btn' + (extraClass ? ' ' + extraClass : ''),
+      title: '主题：跟随时间 / 浅色 / 深色（点按循环切换）',
+      'aria-label': '切换主题'
+    }, [
+      el('span.icon-btn__icon', { 'aria-hidden': 'true' }),
+      el('span.icon-btn__text')
+    ]);
+    return btn;
+  }
+
+  function syncThemeButton(btn) {
+    const mode = App.theme.getMode();
+    const info = App.theme.label(mode);
+    btn.dataset.mode = mode;
+    btn.querySelector('.icon-btn__icon').textContent = info.icon;
+    btn.querySelector('.icon-btn__text').textContent = info.name;
+    btn.title = '主题：' + info.name + '（' + info.hint + '）· 当前' +
+      (App.theme.get() === 'light' ? '浅色' : '深色');
+    // 每次切换都重放一次动画（先清空再设置，强制重新触发）
+    delete btn.dataset.changed;
+    void btn.offsetWidth;
+    btn.dataset.changed = mode;
+  }
+
+  const themeButtons = [];
+
+  function registerThemeButton(btn) {
+    btn.addEventListener('click', function () {
+      const next = App.theme.toggle();
+      App.ui.toast('主题：' + App.theme.label().name + '（当前' +
+        (next === 'light' ? '浅色' : '深色') + '）');
+    });
+    themeButtons.push(btn);
+    syncThemeButton(btn);
+    return btn;
+  }
+
+  function refreshThemeButtons() {
+    themeButtons.forEach(syncThemeButton);
+    const meta = doc.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', App.theme.get() === 'light' ? '#f2f4f9' : '#0b0f1a');
+  }
+
+  /** 一个可直接放进任意界面的主题按钮（供各功能视图复用） */
+  function createThemeControl() {
+    return registerThemeButton(createThemeButton('theme-btn--inline'));
+  }
+
+  /** 清空统计按钮（侧边栏与设置面板各有一个，共用逻辑） */
+  function resetStatsNow() {
+    if (!global.confirm('确定清空全部抛掷统计与历史记录吗？此操作不可撤销。')) return;
+    App.store.resetStats();
+    App.rng.reseed();
+    render();
+    ui.toast('统计与历史已清空');
+  }
+
   /* ---------------------------------------------------------
      全局上下文：传给每个功能的 mount(root, ctx)
      --------------------------------------------------------- */
@@ -26,6 +97,10 @@
     isActive: function () { return current ? current.id === routeId() : false; },
     toast: ui.toast,
     settings: settings,
+    /** 各功能可复用顶部栏同款的主题切换控件 */
+    themeControl: createThemeControl,
+    /** 各功能若自建了「清空统计」入口，直接调用它 */
+    resetStats: resetStatsNow,
     /** 未来功能可以把操作按钮注册到全局动作区（暂未渲染区域） */
     setActions: function () {}
   };
@@ -128,16 +203,27 @@
   }
 
   /* ---------------------------------------------------------
+     顶部栏：主题切换（跟随时间 / 浅色 / 深色）
+     --------------------------------------------------------- */
+  function initTheme() {
+    // 由偏好决定：auto（按时间）/ light / dark
+    // URL 上的 ?theme=light|dark|auto 作为临时覆盖（写入 hash 之前也生效），
+    // 方便直接打开某个外观，且不会改动已保存的偏好。
+    const forced = /[?&]theme=(light|dark|auto)\b/.exec(global.location.search || '');
+    App.theme.init(forced ? forced[1] : settings.theme);
+    // 顶部栏按钮已写在 index.html 里，直接复用同一套渲染逻辑
+    const top = doc.getElementById('themeToggle');
+    if (top && themeButtons.indexOf(top) === -1) registerThemeButton(top);
+    // 主题变化时同步所有主题按钮与浏览器地址栏配色
+    App.theme.onChange(refreshThemeButtons);
+    refreshThemeButtons();
+  }
+
+  /* ---------------------------------------------------------
      顶部栏：清空统计
      --------------------------------------------------------- */
   function initReset() {
-    doc.getElementById('resetStats').addEventListener('click', function () {
-      if (!global.confirm('确定清空全部抛掷统计与历史记录吗？此操作不可撤销。')) return;
-      App.store.resetStats();
-      App.rng.reseed();
-      render();
-      ui.toast('统计与历史已清空');
-    });
+    doc.getElementById('resetStats').addEventListener('click', resetStatsNow);
   }
 
   /* ---------------------------------------------------------
@@ -163,6 +249,7 @@
      --------------------------------------------------------- */
   function boot() {
     buildNav();
+    initTheme();
     initSound();
     initReset();
     initShortcuts();

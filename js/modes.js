@@ -132,6 +132,12 @@
     coin.setSpeedFactor(settings.slowMotion ? 1.8 : 1);
     entropyBox.hidden = !settings.showEntropy;
 
+    // 设置面板里也放一个主题切换：点按循环「跟随时间 → 浅色 → 深色」
+    const themeRow = el('span.setting-item', [
+      el('span.setting-item__label', { text: '主题' }),
+      ctx.themeControl ? ctx.themeControl() : null
+    ]);
+
     const wrap = el('div', [
       el('header.view-head', [
         el('h1', [el('span.view-head__badge', { text: '🪙' }), '抛硬币']),
@@ -145,7 +151,7 @@
       ratio,
       historyBox,
       entropyBox,
-      el('div.settings', [swSlow, swEntropy])
+      el('div.settings', [themeRow, swSlow, swEntropy])
     ]);
 
     root.appendChild(wrap);

@@ -158,17 +158,27 @@ function parseHTML(html, parent) {
 function makeDocument() {
   const doc = new Element('html');
   doc.readyState = 'complete';
+  doc.documentElement = doc;
+  doc.documentElement.style = new Proxy({ setProperty() {}, removeProperty() {} }, { set(t, k, v) { t[k] = v; return true; } });
   const registry = {
     view: new Element('main'),
     navList: new Element('nav'),
     toast: new Element('div'),
     soundToggle: new Element('button'),
     soundIcon: new Element('span'),
-    resetStats: new Element('button')
+    resetStats: new Element('button'),
+    themeToggle: new Element('button'),
+    themeIcon: new Element('span'),
+    themeText: new Element('span')
   };
   registry.soundToggle.appendChild(Object.assign(new Element('span'), { className: 'icon-btn__text' }));
+  registry.themeToggle.appendChild(Object.assign(new Element('span'), { className: 'icon-btn__icon' }));
+  registry.themeToggle.appendChild(Object.assign(new Element('span'), { className: 'icon-btn__text' }));
   doc.body = new Element('body');
   doc.head = new Element('head');
+  // 主题切换会同步浏览器地址栏配色用的 meta
+  doc.head.appendChild(Object.assign(new Element('meta'), { name: 'theme-color' }));
+  doc.querySelector = Element.prototype.querySelector.bind(doc.head);
   doc.documentElement = doc;
   doc.getElementById = (id) => registry[id] || null;
   doc.createElement = (tag) => new Element(tag);
@@ -234,7 +244,7 @@ sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
 sandbox.window.AudioContext = undefined;    // 音频静默降级
 
-const files = ['rng.js', 'store.js', 'audio.js', 'ui.js', 'coin.js', 'modes.js', 'app.js'];
+const files = ['rng.js', 'store.js', 'audio.js', 'theme.js', 'ui.js', 'coin.js', 'modes.js', 'app.js'];
 for (const f of files) {
   const code = fs.readFileSync(path.join(ROOT, 'js', f), 'utf8');
   vm.runInNewContext(code, sandbox, { filename: f });
@@ -347,7 +357,72 @@ App.modes.list.slice(1).forEach((m) => {
   check(`占位功能 ${m.id} 可渲染`, probe.querySelector('.placeholder') !== null);
 });
 
-console.log('\n[6] 存储与重置');
+console.log('\n[6] 深浅主题');
+{
+  const T = App.theme;
+  check('theme 模块已加载', !!T && typeof T.themeByTime === 'function');
+
+  // 时间判定：08:00–17:59 浅色，其余深色
+  const at = (h, m) => new Date(2026, 0, 15, h, m || 0, 0);
+  const table = [
+    [0, 'dark'], [7, 'dark'], [7.99, 'dark'], [8, 'light'], [12, 'light'],
+    [17, 'light'], [17.99, 'light'], [18, 'dark'], [23, 'dark']
+  ];
+  const wrong = table.filter(([h, want]) => {
+    const hh = Math.floor(h);
+    const mm = Math.round((h - hh) * 60);
+    return T.themeByTime(at(hh, mm)) !== want;
+  });
+  check('按时间判定正确（8:00–18:00 浅色）', wrong.length === 0,
+    wrong.length ? JSON.stringify(wrong) : '');
+
+  check('早上 9 点 → 浅色', T.themeByTime(at(9)) === 'light');
+  check('晚上 21 点 → 深色', T.themeByTime(at(21)) === 'dark');
+  check('auto 模式解析为时间结果',
+    T.resolve('auto') === T.themeByTime(new Date()));
+
+  // 两种固定模式
+  T.setMode('light');
+  check('固定浅色生效', T.get() === 'light' && doc.getAttribute('data-theme') === 'light');
+  T.setMode('dark');
+  check('固定深色生效', T.get() === 'dark' && doc.getAttribute('data-theme') === 'dark');
+
+  // 循环切换：auto → light → dark → auto
+  T.setMode('auto');
+  const seq = [T.getMode()];
+  seq.push((T.toggle(), T.getMode()));
+  seq.push((T.toggle(), T.getMode()));
+  seq.push((T.toggle(), T.getMode()));
+  check('点按循环 auto→light→dark→auto',
+    seq.join('>') === 'auto>light>dark>auto', seq.join('>'));
+
+  // 模式持久化
+  T.setMode('light');
+  check('模式写入偏好', App.store.getSettings().theme === 'light');
+
+  // 变化回调
+  let fired = 0;
+  const off = T.onChange(() => { fired++; });
+  T.setMode('dark');
+  T.setMode('light');
+  off();
+  T.setMode('dark');
+  check('主题变化回调正常（退订后不再触发）', fired === 2, `fired=${fired}`);
+
+  // 顶部栏按钮已同步
+  const btn = doc._registry.themeToggle;
+  check('顶部栏主题按钮已同步',
+    btn.dataset.mode === 'dark' && btn.querySelector('.icon-btn__text').textContent === '深色',
+    `mode=${btn.dataset.mode} text=${btn.querySelector('.icon-btn__text').textContent}`);
+  check('按钮点击可切换主题', (() => {
+    const before = T.getMode();
+    btn.click();
+    return T.getMode() !== before;
+  })());
+  T.setMode('auto');
+}
+
+console.log('\n[7] 存储与重置');
 check('localStorage 写入成功', storage.size > 0, `keys=${[...storage.keys()].join(', ')}`);
 App.store.resetStats();
 const cleared = App.store.getStats();
