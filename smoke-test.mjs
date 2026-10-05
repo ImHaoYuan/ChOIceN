@@ -411,15 +411,53 @@ console.log('\n[6] 深浅主题');
 
   // 顶部栏按钮已同步
   const btn = doc._registry.themeToggle;
+  const btnText = () => btn.querySelector('.icon-btn__text').textContent;
   check('顶部栏主题按钮已同步',
-    btn.dataset.mode === 'dark' && btn.querySelector('.icon-btn__text').textContent === '深色',
-    `mode=${btn.dataset.mode} text=${btn.querySelector('.icon-btn__text').textContent}`);
+    btn.dataset.mode === 'dark' && btnText() === '深色',
+    `mode=${btn.dataset.mode} text=${btnText()}`);
   check('按钮点击可切换主题', (() => {
     const before = T.getMode();
     btn.click();
     return T.getMode() !== before;
   })());
+
+  /*
+   * 回归：切回 auto 时，若「时间解析出的外观」与上一次固定模式的外观相同，
+   * 按钮也必须跟着变回「跟随时间」。
+   * 曾经的 bug：apply() 只在 resolved !== current 时才通知，
+   * 于是 auto→light→dark→auto 的第三次点按不通知按钮，
+   * 顶部栏停在“深色”，而弹窗（即时计算）显示“跟随时间”，两者不一致。
+   */
+  T.setMode('dark');                       // 固定深色作为起点
+  const startTheme = T.get();
+  T.toggle();                              // → auto
+  check('切回 auto 后模式为 auto', T.getMode() === 'auto');
+  check('切回 auto 且外观未变时，按钮文字仍会更新为「跟随时间」',
+    btnText() === '跟随时间' && btn.dataset.mode === 'auto',
+    `text=${btnText()} data-mode=${btn.dataset.mode} get=${T.get()}`);
+  check('切回 auto 且外观未变时，外观保持不变（不闪烁）',
+    T.get() === startTheme, `get=${T.get()} start=${startTheme}`);
+  check('按钮文字与弹窗文案一致', (() => {
+    const toastText = '主题：' + T.label().name;
+    return toastText === '主题：' + btnText();
+  })(), `按钮=${btnText()}`);
+
+  // 模式变了、外观也变了的情况同样要通知
+  T.setMode('light');
+  check('模式与外观同时变化时按钮同步', btnText() === '浅色' && btn.dataset.mode === 'light',
+    `text=${btnText()} mode=${btn.dataset.mode}`);
+
   T.setMode('auto');
+  check('回到 auto 后按钮与模式一致',
+    T.getMode() === 'auto' && btnText() === '跟随时间' && btn.dataset.mode === 'auto');
+
+  // 刷新页面后（重新 init）也应保持 auto，而不是掉回上一次的固定模式
+  const persisted = App.store.getSettings().theme;
+  check('auto 模式已持久化', persisted === 'auto', `saved=${persisted}`);
+  T.init(persisted);
+  check('重新 init 后仍是跟随时间',
+    T.getMode() === 'auto' && btnText() === '跟随时间',
+    `mode=${T.getMode()} text=${btnText()}`);
 }
 
 console.log('\n[7] 存储与重置');

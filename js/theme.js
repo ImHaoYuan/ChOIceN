@@ -55,26 +55,30 @@
 
   /** 应用主题；传 mode 则同时切换模式 */
   function apply(nextMode) {
+    const modeChanged = nextMode != null && normalize(nextMode) !== mode;
     if (nextMode != null) mode = normalize(nextMode);
     const resolved = resolve(mode);
     // 即使结果没变也要写一次属性，保证首屏内联脚本的结果与这里一致
     paint(resolved);
-    if (resolved !== current) {
-      current = resolved;
-      notify();
-    }
+    /*
+     * 通知条件必须包含「模式本身变了」。
+     * 曾经这里只判断 resolved !== current，于是 auto → light → dark → auto 的第三次点按
+     * （切回 auto 时解析结果仍等于上一次的 dark）不会触发通知，
+     * 顶部栏按钮就停在上一次的文字「深色」上，而弹窗是即时计算的、显示「跟随时间」，
+     * 两者对不上。界面绑定的既有模式名也有外观，所以任一项变化都要通知。
+     */
+    const themeChanged = resolved !== current;
+    current = resolved;
+    if (modeChanged || themeChanged) notify();
     return current;
   }
 
   /** auto 模式下跨过 8:00 / 18:00 时自动切换 */
   function tick() {
     if (mode !== 'auto') return;
-    const resolved = themeByTime(new Date());
-    if (resolved !== current) {
-      current = resolved;
-      paint(resolved);
-      notify();
-    }
+    // 先在 Date 上判断，避免每 60 秒都写一次 DOM、通知一次（没变就不动）
+    if (themeByTime(new Date()) === current) return;
+    apply();
   }
 
   /** 系统主题变化时不介入：本方案的 auto 完全以本地时间为准 */
@@ -108,7 +112,7 @@
       return this.setMode(MODES[(i + 1) % MODES.length]);
     },
 
-    /** 订阅主题变化（返回取消订阅函数） */
+    /** 订阅变化：模式或外观任一变都会触发（返回取消订阅函数） */
     onChange: function (fn) {
       listeners.push(fn);
       return function () {
