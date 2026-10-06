@@ -79,6 +79,31 @@
     return registerThemeButton(createThemeButton('theme-btn--inline'));
   }
 
+  /* ---------------------------------------------------------
+     偏好变更广播
+     ---------------------------------------------------------
+     顶部栏现在承载了「慢动作 / 显示随机源」这些开关，
+     但它们影响的是当前视图里的东西（硬币速度、随机源面板显隐），
+     所以改完要广播出去，由视图自己响应，而不是让顶部栏去操作视图内部。
+  */
+  const settingListeners = [];
+
+  function onSettingChange(fn) {
+    settingListeners.push(fn);
+    return function () {
+      const i = settingListeners.indexOf(fn);
+      if (i > -1) settingListeners.splice(i, 1);
+    };
+  }
+
+  function applySetting(key, value) {
+    settings[key] = value;
+    App.store.setSetting(key, value);
+    settingListeners.slice().forEach(function (fn) {
+      try { fn(key, value); } catch (e) { /* 单个订阅者出错不影响其它人 */ }
+    });
+  }
+
   /** 清空统计按钮（侧边栏与设置面板各有一个，共用逻辑） */
   function resetStatsNow() {
     if (!global.confirm('确定清空全部抛掷统计与历史记录吗？此操作不可撤销。')) return;
@@ -101,6 +126,8 @@
     themeControl: createThemeControl,
     /** 各功能若自建了「清空统计」入口，直接调用它 */
     resetStats: resetStatsNow,
+    /** 订阅偏好变化（返回取消订阅函数）；顶部栏的开关改动会广播给当前视图 */
+    onSetting: onSettingChange,
     /** 未来功能可以把操作按钮注册到全局动作区（暂未渲染区域） */
     setActions: function () {}
   };
@@ -220,6 +247,84 @@
   }
 
   /* ---------------------------------------------------------
+     顶部栏：随机源（点按循环 混合 → 加密 → 时间）
+     --------------------------------------------------------- */
+  function initSource() {
+    const btn = doc.getElementById('sourceToggle');
+    const nameEl = doc.getElementById('sourceName');
+    const iconEl = doc.getElementById('sourceIcon');
+    if (!btn || !nameEl || !iconEl) return;
+
+    function sync() {
+      const key = App.rng.getSource();
+      const label = App.rng.sourceLabel(key);
+      nameEl.textContent = label.name;
+      if (label.icon) iconEl.textContent = label.icon;
+      btn.dataset.source = key;
+      btn.title = '随机源：' + label.name + '（' + label.desc + '）· 点按循环切换';
+    }
+
+    btn.addEventListener('click', function () {
+      const next = App.rng.cycle();
+      App.store.setSetting('rngSource', next);
+      ui.toast('随机源已切换为「' + App.rng.sourceLabel(next).name + '」' +
+        (App.rng.hasCrypto ? '' : '（当前环境不支持 crypto）'));
+    });
+
+    App.rng.onChange(sync);
+    sync();
+  }
+
+  /* ---------------------------------------------------------
+     顶部栏：更多选项（下拉列表里放次要开关）
+     --------------------------------------------------------- */
+  function initMoreMenu() {
+    const wrap = doc.getElementById('moreMenu');
+    const btn = doc.getElementById('moreToggle');
+    const panel = doc.getElementById('morePanel');
+    if (!wrap || !btn || !panel) return;
+
+    // 两个开关复用 ui.switchControl；改完通过 applySetting 广播给当前视图
+    const swSlow = ui.switchControl('慢动作', settings.slowMotion, function (on) {
+      applySetting('slowMotion', on);
+      ui.toast(on ? '慢动作已开启（动画 1.8×）' : '慢动作已关闭');
+    });
+    const swEntropy = ui.switchControl('显示随机源', settings.showEntropy, function (on) {
+      applySetting('showEntropy', on);
+    });
+
+    panel.appendChild(el('p.menu__title', { text: '更多选项' }));
+    panel.appendChild(el('div.menu__list', [swSlow, swEntropy]));
+
+    function setOpen(open) {
+      panel.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      wrap.classList.toggle('menu--open', open);
+    }
+
+    btn.addEventListener('click', function (e) {
+      // 阻止冒泡，否则会被下面的「点空白处关闭」立刻关掉
+      if (e && e.stopPropagation) e.stopPropagation();
+      setOpen(panel.hidden);
+    });
+    // 点面板内部（拨动开关）不关闭
+    panel.addEventListener('click', function (e) {
+      if (e && e.stopPropagation) e.stopPropagation();
+    });
+    // 点页面其它地方、或按 Esc 关闭
+    doc.addEventListener('click', function () { if (!panel.hidden) setOpen(false); });
+    doc.addEventListener('keydown', function (e) {
+      if (panel.hidden) return;
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setOpen(false);
+        btn.focus();
+      }
+    });
+
+    setOpen(false);
+  }
+
+  /* ---------------------------------------------------------
      顶部栏：清空统计
      --------------------------------------------------------- */
   function initReset() {
@@ -248,8 +353,12 @@
      启动
      --------------------------------------------------------- */
   function boot() {
+    // 先定随机源：后续所有取值（含首屏那次预热）都要用它
+    App.rng.setSource(settings.rngSource);
     buildNav();
     initTheme();
+    initSource();
+    initMoreMenu();
     initSound();
     initReset();
     initShortcuts();
@@ -260,7 +369,8 @@
     if (!global.location.hash) global.location.replace('#/' + App.modes.defaultId);
     render();
     console.log('%cChOIceN','color:#f2c75c;font-weight:700',
-      '已就绪 · 随机源：时间熵 + xorshift64* · 通过 App.modes.list 注册新功能');
+      '已就绪 · 随机源：' + App.rng.sourceLabel().name +
+      '（' + App.rng.sourceLabel().desc + '）· 通过 App.modes.list 注册新功能');
   }
 
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', boot);

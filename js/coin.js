@@ -135,7 +135,9 @@
     /**
      * 抛一次。
      * @param {string} face  结果面：'heads' | 'tails'（由 App.rng 事先决定）
-     * @param {object} [cfg] { duration, onLand }
+     * @param {object} [cfg] { duration, turns, onLand }
+     *        duration 本次时长（毫秒，仍会乘 speedFactor 慢动作系数）
+     *        turns    本次翻转圈数范围 {min,max}，连抛时传小一点以免糊成一团
      * @returns {Promise<void>}
      */
     function flipTo(face, cfg) {
@@ -145,7 +147,8 @@
       coinEl.classList.remove('coin--landed');
 
       const duration = (conf.duration || DURATION) * speedFactor;
-      const turns = TURNS.min + App.rng.int(TURNS.max - TURNS.min + 1);
+      const turnRange = conf.turns || TURNS;
+      const turns = turnRange.min + App.rng.int(turnRange.max - turnRange.min + 1);
       const start = rotation;
       const target = start + turns * 360 +
         ((((face === 'tails' ? 180 : 0) - start) % 360) + 360) % 360;
@@ -205,6 +208,8 @@
       flipTo: flipTo,
       isFlipping: function () { return flipping; },
       setSpeedFactor: function (f) { speedFactor = f || 1; },
+      /** 供测试/调试：当前的慢动作系数 */
+      getSpeedFactor: function () { return speedFactor; },
       /** 供测试/调试：当前朝向角（0 = 正面，180 = 反面） */
       currentAngle: function () { return rotation; },
       /** 供测试/调试：摆到任意角度并返回此刻显示的币面 */

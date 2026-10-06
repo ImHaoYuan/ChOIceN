@@ -106,11 +106,28 @@
     return ((part / total) * 100).toFixed(1) + '%';
   }
 
+  /**
+   * 一个「开关」控件（用于慢动作、显示随机源等）。
+   * 顶部栏的「更多选项」和未来的功能视图都可以直接复用。
+   * @param {string} label
+   * @param {boolean} checked
+   * @param {(on:boolean)=>void} onChange
+   */
+  function switchControl(label, checked, onChange) {
+    const input = el('input', { type: 'checkbox' });
+    input.checked = !!checked;
+    input.addEventListener('change', function () {
+      if (typeof onChange === 'function') onChange(input.checked);
+    });
+    return el('label.switch', [input, el('span.switch__track'), el('span', { text: label })]);
+  }
+
   App.ui = {
     el: el,
     toast: toast,
     formatTime: formatTime,
     formatPercent: formatPercent,
+    switchControl: switchControl,
     faceText: function (face) { return face === 'tails' ? '反面' : '正面'; },
     faceShort: function (face) { return face === 'tails' ? '反' : '正'; },
     clear: function (node) { while (node && node.firstChild) node.removeChild(node.firstChild); }

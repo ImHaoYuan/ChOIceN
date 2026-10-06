@@ -54,8 +54,16 @@
   </a>
 
   <nav class="topbar__nav" aria-label="功能分类">
-    <span class="tag" data-i18n="topbar.randomSource">随机源</span>
-    <span class="tag tag--ghost">时间 · Time</span>
+    <!-- 清空统计：从侧边栏移到这里，放在「随机源」左侧 -->
+    <button id="resetStats" class="icon-btn" type="button" title="清空全部抛掷统计与历史记录">
+      <span class="icon-btn__icon" aria-hidden="true">🧹</span>
+      <span class="icon-btn__text" data-i18n="sidebar.reset">清空统计</span>
+    </button>
+    <!-- 随机源：点按循环 混合 → 加密 → 时间，与主题按钮同一套交互 -->
+    <button id="sourceToggle" class="icon-btn" type="button" title="随机源（点按循环切换）">
+      <span class="icon-btn__icon" id="sourceIcon" aria-hidden="true">🔀</span>
+      <span class="icon-btn__text" id="sourceName">混合</span>
+    </button>
     <button id="themeToggle" class="icon-btn" type="button" title="主题：跟随时间 / 浅色 / 深色（点按循环切换）">
       <span class="icon-btn__icon" id="themeIcon" aria-hidden="true">⏱️</span>
       <span class="icon-btn__text" id="themeText">跟随时间</span>
@@ -64,6 +72,17 @@
       <span class="icon-btn__icon" id="soundIcon" aria-hidden="true">🔊</span>
       <span class="icon-btn__text" data-i18n="topbar.sound">音效</span>
     </button>
+    <!-- 更多选项：把「慢动作 / 显示随机源」这类次要开关收进下拉列表 -->
+    <div class="menu" id="moreMenu">
+      <button id="moreToggle" class="icon-btn" type="button"
+              aria-haspopup="true" aria-expanded="false" aria-controls="morePanel"
+              title="更多选项：慢动作 / 显示随机源">
+        <span class="icon-btn__icon" aria-hidden="true">⚙️</span>
+        <span class="icon-btn__text">更多选项</span>
+      </button>
+      <!-- 列表内容由 js/app.js 注入（复用 ui.switchControl） -->
+      <div class="menu__panel" id="morePanel" role="group" aria-label="更多选项" hidden></div>
+    </div>
   </nav>
 </header>
 
@@ -79,7 +98,6 @@
 
     <div class="sidebar__foot">
       <p class="sidebar__hint" data-i18n="sidebar.hint">后续功能将以同样的卡片形式加入，接口已预留。</p>
-      <button id="resetStats" class="link-btn" type="button" data-i18n="sidebar.reset">清空统计记录</button>
     </div>
   </aside>
 

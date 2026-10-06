@@ -33,13 +33,25 @@
     let busy = false;
     let lastInfo = App.rng.info();
 
+    /*
+     * 抛掷动画的两档参数：
+     *   - 单次抛掷用原速（2500ms / 5–8 圈），保持「抛起来、慢慢落定」的观感；
+     *   - 连抛 10 次用加速档（850ms / 3–4 圈），否则 10 次要点 27 秒以上，
+     *     而且中间还有 220ms 停顿，等待感很强。
+     * 圈数要跟着时长一起降：时长缩短后若还转 8 圈，角速度过高会糊成一片白，
+     * 反而看不清翻转。慢动作（slowMotion）开启时仍会乘上系数，尊重用户选择。
+     */
+    const FLIP_NORMAL = { duration: 2500, turns: { min: 5, max: 8 } };
+    const FLIP_FAST = { duration: 850, turns: { min: 3, max: 4 } };
+    const FLIP_FAST_GAP = 110;      // 连抛时两次之间的停顿（原为 220ms）
+
     /* ---------- 结构 ---------- */
     const statusMain = el('div.stage__status-main', { text: '准备好了吗？' });
     const statusSub = el('div.stage__status-sub', { text: '点击「抛一次」，或直接按空格键' });
     const statusBox = el('div.stage__status', { dataset: { state: 'idle' } }, [statusMain, statusSub]);
 
     const toss = el('div.toss');
-    const coin = App.createCoin({ duration: 2500, lift: 14, turns: { min: 5, max: 8 } });
+    const coin = App.createCoin({ duration: FLIP_NORMAL.duration, lift: 14, turns: FLIP_NORMAL.turns });
     // 便于调试与自动化测试观察硬币状态
     global.__coin = coin;
     toss.appendChild(coin.el);
@@ -91,67 +103,74 @@
     ]);
 
     /* ---------- 随机源诊断 ---------- */
+    const eSource = el('b');      // 当前选中的随机源
+    const eUsed = el('b');        // 本次取值实际走的路径
+    const eCryptoUse = el('b');   // 本次是否用到了系统熵
+    const eCryptoRaw = el('b');   // 最近一次取到的系统随机数
+    const eCryptoWords = el('b'); // 累计取了多少个 32 位系统随机数
     const eTime = el('b');
     const eDelta = el('b');
     const eCalls = el('b');
-    const eBits = el('b');
     const ePool = el('b');
-    const eSource = el('b');
+    const eBits = el('b');
     const entropyBox = el('div.entropy', [
       el('div.entropy__title', { text: '本次随机是怎么来的' }),
+      el('div.entropy__row', [
+        el('span.entropy__item', [el('span', { text: '随机源 ' }), eSource]),
+        el('span.entropy__item', [el('span', { text: '本次取值 ' }), eUsed]),
+        el('span.entropy__item', [el('span', { text: '系统熵 ' }), eCryptoUse]),
+        el('span.entropy__item', [el('span', { text: '系统随机数 ' }), eCryptoRaw])
+      ]),
       el('div.entropy__row', [
         el('span.entropy__item', [el('span', { text: '时间戳 ' }), eTime]),
         el('span.entropy__item', [el('span', { text: '与上次间隔 ' }), eDelta]),
         el('span.entropy__item', [el('span', { text: '池内调用数 ' }), eCalls]),
-        el('span.entropy__item', [el('span', { text: '状态池 ' }), ePool]),
-        el('span.entropy__item', [el('span', { text: 'crypto ' }), eSource])
+        el('span.entropy__item', [el('span', { text: '状态池 ' }), ePool])
       ]),
       el('div.entropy__row', [
-        el('span.entropy__item', [el('span', { text: '输出位 ' }), eBits])
+        el('span.entropy__item', [el('span', { text: '输出位 ' }), eBits]),
+        el('span.entropy__item', [el('span', { text: '累计系统取值 ' }), eCryptoWords])
       ])
     ]);
 
-    /* ---------- 设置 ---------- */
-    function makeSwitch(label, key, onChange) {
-      const input = el('input', { type: 'checkbox' });
-      input.checked = !!settings[key];
-      input.addEventListener('change', function () {
-        settings[key] = input.checked;
-        store.setSetting(key, input.checked);
-        if (onChange) onChange(input.checked);
-      });
-      return el('label.switch', [input, el('span.switch__track'), el('span', { text: label })]);
-    }
+    /* ---------- 随机源切换已移到顶部栏 ----------
+       这里不再自建选择器（原来是页面最下方的 .seg 分段按钮），
+       顶部栏那个按钮点按循环 混合 → 加密 → 时间。
+       但本页的「随机源」面板要跟着刷新，否则会出现
+       「顶部栏已经切到加密、面板还写着混合」的不一致。 */
+    const offRng = App.rng.onChange(function () {
+      lastInfo = App.rng.info();
+      renderEntropy();
+    });
 
-    const swSlow = makeSwitch('慢动作', 'slowMotion', function (on) {
-      coin.setSpeedFactor(on ? 1.8 : 1);
-    });
-    const swEntropy = makeSwitch('显示随机源', 'showEntropy', function (on) {
-      entropyBox.hidden = !on;
-    });
+    /* ---------- 与顶部栏开关联动 ----------
+       慢动作 / 显示随机源 这两个开关现在住在顶部栏的「更多选项」里，
+       视图不自己造开关，只订阅偏好变化：
+       app.js 改完设置会广播 (key, value)，这里据此调整硬币速度与面板显隐。 */
     coin.setSpeedFactor(settings.slowMotion ? 1.8 : 1);
     entropyBox.hidden = !settings.showEntropy;
 
-    // 设置面板里也放一个主题切换：点按循环「跟随时间 → 浅色 → 深色」
-    const themeRow = el('span.setting-item', [
-      el('span.setting-item__label', { text: '主题' }),
-      ctx.themeControl ? ctx.themeControl() : null
-    ]);
+    const offSetting = ctx.onSetting ? ctx.onSetting(function (key, value) {
+      if (key === 'slowMotion') coin.setSpeedFactor(value ? 1.8 : 1);
+      if (key === 'showEntropy') entropyBox.hidden = !value;
+    }) : null;
 
     const wrap = el('div', [
       el('header.view-head', [
         el('h1', [el('span.view-head__badge', { text: '🪙' }), '抛硬币']),
         el('p', {
-          text: '结果来自「当前时间」组成的随机源：毫秒时间戳、高精度计时、调用间隔与调用序号会一起混入 64 位状态池。' +
-                '每次点击都会采集新的时间熵，因此同一毫秒内的连续抛掷也不会重复。'
+          text: '结果来自可切换的随机源：「混合」把时间熵与系统加密随机一起混入 64 位状态池，' +
+                '「加密」直接使用 crypto.getRandomValues（操作系统熵），' +
+                '「时间」仅用本地时间熵。' +
+                '时间源会采集毫秒时间戳、高精度计时、调用间隔与调用序号，因此同一毫秒内连续抛掷也不会重复。' +
+                '主题、随机源、慢动作与随机源面板都在右上角切换。'
         })
       ]),
       stage,
       resultBar,
       ratio,
       historyBox,
-      entropyBox,
-      el('div.settings', [themeRow, swSlow, swEntropy])
+      entropyBox
     ]);
 
     root.appendChild(wrap);
@@ -193,13 +212,27 @@
       const info = lastInfo;
       const d = new Date(info.time);
       const pad = function (n, w) { return String(n).padStart(w || 2, '0'); };
+      const nameOf = function (key) {
+        return App.rng.SOURCE_LABEL[key] ? App.rng.SOURCE_LABEL[key].name : key;
+      };
+      /*
+       * 「随机源」显示当前选中的那个，「本次取值」显示上一个值实际走的路径。
+       * 两者要分开：info().source 是「上一次取值用了什么」，
+       * 刚切换源、还没取值时它仍是旧值。若面板只显示 info().source，
+       * 切换后会出现「按钮已经是加密、面板还写着混合」的不一致。
+       */
+      eSource.textContent = nameOf(App.rng.getSource());
+      eUsed.textContent = nameOf(info.source);
+      const usedCrypto = info.source === 'crypto' || info.source === 'hybrid';
+      eCryptoUse.textContent = usedCrypto ? '已使用' : (info.hasCrypto ? '未使用' : '不可用');
+      eCryptoRaw.textContent = info.crypto ? '0x' + info.crypto.toString(16).padStart(8, '0') : '—';
+      eCryptoWords.textContent = info.hasCrypto ? info.cryptoWords + ' 字' : '—';
       eTime.textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' +
         pad(d.getSeconds()) + '.' + pad(d.getMilliseconds(), 3);
       eDelta.textContent = (info.delta || 0) + ' ms';
       eCalls.textContent = String(info.calls);
       eBits.textContent = info.bits;
       ePool.textContent = '0x' + info.pool;
-      eSource.textContent = info.hasCrypto ? '已混入' : '不可用';
     }
 
     function setState(state, main, sub) {
@@ -229,10 +262,18 @@
       renderEntropy();
     }
 
-    function oneFlip() {
+    /**
+     * 抛一次。
+     * @param {object} [opts] { fast } fast 为真时用连抛的加速参数
+     */
+    function oneFlip(opts) {
+      const conf = opts || {};
+      const anim = conf.fast ? FLIP_FAST : FLIP_NORMAL;
       return new Promise(function (resolve) {
-        const face = App.rng.side();          // ← 结果先由时间随机源决定
+        const face = App.rng.side();          // ← 结果先由随机源决定，动画只是表演
         coin.flipTo(face, {
+          duration: anim.duration,
+          turns: anim.turns,
           onLand: function () {
             const info = App.rng.info();
             setState(face, ui.faceText(face) + (face === 'heads' ? ' · 正面朝上' : ' · 反面朝上'),
@@ -243,14 +284,15 @@
           }
         });
         App.audio.play('toss');
-        global.setTimeout(function () { App.audio.play('spin'); }, 60);
+        // 加速档下 850ms 内再叠一层旋转噪声会糊成噪音，跳过
+        if (!conf.fast) global.setTimeout(function () { App.audio.play('spin'); }, 60);
       });
     }
 
     async function doFlip() {
       if (busy) return;
       setBusy(true);
-      setState('flipping', '旋转中…', '正在采集时间熵');
+      setState('flipping', '旋转中…', '正在采集' + App.rng.sourceLabel().name + '熵');
       await oneFlip();
       setBusy(false);
     }
@@ -258,12 +300,15 @@
     async function doFlipMany(times) {
       if (busy) return;
       setBusy(true);
+      const t0 = Date.now();
       for (let i = 0; i < times; i++) {
-        setState('flipping', '旋转中… (' + (i + 1) + '/' + times + ')', '连续抛掷，结果逐次记录');
-        await oneFlip();
-        if (i < times - 1) await new Promise(function (r) { global.setTimeout(r, 220); });
+        setState('flipping', '旋转中… (' + (i + 1) + '/' + times + ')',
+          '连抛模式：动画已加速，结果逐次记录');
+        await oneFlip({ fast: true });
+        if (i < times - 1) await new Promise(function (r) { global.setTimeout(r, FLIP_FAST_GAP); });
       }
-      setState('idle', '连抛完成', '共 ' + times + ' 次，结果已记入统计');
+      const seconds = ((Date.now() - t0) / 1000).toFixed(1);
+      setState('idle', '连抛完成', '共 ' + times + ' 次，用时 ' + seconds + ' 秒，结果已记入统计');
       global.setTimeout(function () {
         if (!busy) setState('idle', '准备好了吗？', '点击「抛一次」，或直接按空格键');
       }, 2200);
@@ -317,6 +362,9 @@
 
     return function destroy() {
       global.document.removeEventListener('keydown', onKeydown);
+      // 视图销毁时必须退订，否则每次切功能都会堆积一个订阅者
+      if (offSetting) offSetting();
+      offRng();
       coin.destroy();
     };
   }

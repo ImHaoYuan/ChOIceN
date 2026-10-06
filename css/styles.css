@@ -220,30 +220,20 @@ code {
 
 .topbar__nav { display: flex; align-items: center; gap: 10px; }
 
-.tag {
-  font-size: 12px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  border: 1px solid var(--gold-line);
-  background: var(--gold-soft);
-  color: var(--gold);
-  white-space: nowrap;
-}
-.tag--ghost {
-  border-color: var(--border);
-  background: var(--surface);
-  color: var(--text-soft);
-}
-
 .icon-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   padding: 7px 12px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-soft);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
   cursor: pointer;
   transition: border-color .2s, background .2s, color .2s, transform .15s;
 }
@@ -251,6 +241,13 @@ code {
 .icon-btn:active { transform: scale(0.96); }
 .icon-btn[aria-pressed="false"] { color: var(--text-dim); opacity: 0.75; }
 .icon-btn__text { font-size: 13px; }
+
+/* 顶部栏这一排按钮统一宽度：
+   文案长短不一（清空统计 / 混合 / 跟随时间 / 更多选项），
+   不锁宽度的话点一下随机源，整排按钮就会左右抖动。
+   min-width 取最长那档（4 个汉字 + 图标 + 内边距）再留一点余量。
+   窄屏下文案会被隐藏（见文件末尾的响应式一节），那时 min-width 必须让开。 */
+.topbar .icon-btn { min-width: 108px; }
 
 /* ===== 3. 布局 ===== */
 .layout {
@@ -322,18 +319,8 @@ code {
 .sidebar__foot { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--border); }
 .sidebar__hint { font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }
 
-.link-btn {
-  margin-top: 12px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-dim);
-  font-size: 12.5px;
-  cursor: pointer;
-  border-bottom: 1px dashed currentColor;
-  transition: color .2s;
-}
-.link-btn:hover { color: var(--danger); }
+/* 注意：「清空统计」按钮已移到顶部栏（index.html 的 #resetStats），
+   原先这里的 .link-btn 样式随之删除，避免留下死样式。 */
 
 /* ===== 5. 通用组件 ===== */
 .view { min-width: 0; }
@@ -574,8 +561,8 @@ code {
 }
 /* 模糊层里的币面是虚影，只留内圈描边 */
 .coin__layer--blur .coin__face { box-shadow: inset 0 0 0 4px var(--face-ring); }
-/* 下层只负责露出「厚度」那一线底色；它自身若带投影，会在硬币下方形成一圈脏边 */
-.coin__layer--bottom .coin__face { box-shadow: none; }
+/* 注意：硬币的「厚度」现在由 .coin__layer--top 的 box-shadow 画（见上面），
+   已经不再有 coin__layer--bottom 这个图层，对应的样式已删除。 */
 
 /* 币面细节：内圈 + 齿边 */
 .coin__face::before {
@@ -633,8 +620,12 @@ code {
   color: #06372b;
 }
 
-/* 落定时的高光扫过（只作用在当前可见的那一面） */
-.coin--landed .coin__face:not(.coin__layer--hidden)::after {
+/* 落定时的高光扫过（只作用在当前可见的那一面）。
+   隐藏用的类名是 coin__face--hidden（JS 写在这个元素上），
+   这里曾误写成 coin__layer--hidden —— 那个类不存在，:not() 恒为真，
+   高光会同时挂到两面。目前隐藏面是 display:none 所以看不出来，
+   但换成 opacity 隐藏就会两面一起扫光，故按真实类名写。 */
+.coin--landed .coin__face:not(.coin__face--hidden)::after {
   content: "";
   position: absolute;
   inset: -30%;
@@ -777,23 +768,40 @@ code {
 .entropy__item { white-space: nowrap; }
 .entropy__row b { color: var(--text-soft); font-weight: 600; }
 
-/* ===== 8. 通用设置面板 ===== */
-.settings {
+/* ===== 8. 顶部栏下拉列表（更多选项） =====
+   原来的「通用设置面板」(.settings / .setting-item) 与随机源分段控件 (.seg)
+   已经随页面最下方那一排设置一起移除，开关都搬进这里了。 */
+.menu { position: relative; display: inline-flex; }
+.menu__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  min-width: 190px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-deep);
+}
+.menu__panel[hidden] { display: none; }
+.menu__title {
+  margin: 0 0 9px;
+  font-size: 11.5px;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+}
+.menu__list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px 26px;
-  margin-top: 22px;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
+  gap: 11px;
 }
-
-/* 设置项：左侧标签 + 右侧控件 */
-.setting-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
+/* 展开时按钮保持高亮，让「面板是从这里弹出来的」一目了然 */
+.menu--open > .icon-btn {
+  background: var(--surface-strong);
+  color: var(--text);
+  border-color: var(--border-strong);
 }
-.setting-item__label { font-size: 13px; color: var(--text-soft); }
 
 /* 主题按钮：点按循环「跟随时间 → 浅色 → 深色」，切换时图标闪一下作为反馈 */
 .theme-btn[data-changed] .icon-btn__icon { animation: themePop .45s var(--ease-out); }
@@ -875,12 +883,28 @@ code {
   .sidebar__foot { display: none; }
 }
 
+@media (max-width: 860px) {
+  /* 顶部栏现在有 5 个按钮（清空统计 / 随机源 / 主题 / 音效 / 更多选项），
+     每个 108px 加间距约 580px，再算上左侧品牌区，窗口窄于约 860px 就挤不下了。
+     这时一律只留图标（每个按钮都有 title 提示），min-width 也要跟着让开，
+     否则图标按钮之间会留出大片空白。 */
+  .topbar .icon-btn { min-width: 44px; }
+  .topbar .icon-btn__text { display: none; }
+}
+
+@media (max-width: 760px) {
+  /* 再窄就允许顶部栏换行（图标按钮一般已经能一行放下，这是最后的兜底） */
+  .topbar { flex-wrap: wrap; row-gap: 10px; }
+}
+
 @media (max-width: 560px) {
   .toss { --size: 150px; }
-  .topbar { flex-wrap: wrap; }
   .brand__text small { display: none; }
   .btn { padding: 11px 16px; }
   .btn kbd { display: none; }
+  .topbar .icon-btn { padding: 7px 10px; }
+  /* 下拉面板贴着右边缘，窄屏要留出边距，别顶出视口 */
+  .menu__panel { min-width: 170px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
