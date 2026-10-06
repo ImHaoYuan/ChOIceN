@@ -283,7 +283,8 @@ sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
 sandbox.window.AudioContext = undefined;    // 音频静默降级
 
-const files = ['rng.js', 'store.js', 'audio.js', 'theme.js', 'ui.js', 'coin.js', 'modes.js', 'app.js'];
+const files = ['rng.js', 'store.js', 'audio.js', 'theme.js', 'ui.js',
+  'coin.js', 'entropy.js', 'dice.js', 'modes.js', 'app.js'];
 for (const f of files) {
   const code = fs.readFileSync(path.join(ROOT, 'js', f), 'utf8');
   vm.runInNewContext(code, sandbox, { filename: f });
@@ -299,6 +300,15 @@ function check(label, cond, extra = '') {
 const App = sandbox.App;
 const view = doc._registry.view;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** 轮询等待一个条件成立（动画时长随实现变化，写死 sleep 容易变成脆弱断言） */
+async function waitFor(pred, timeout = 5000) {
+  let waited = 0;
+  while (!pred() && waited < timeout) {
+    await sleep(30);
+    waited += 30;
+  }
+  return waited;
+}
 const coinProbe = sandbox.__coin;
 
 /* ---------------- 测试 ---------------- */
@@ -548,12 +558,14 @@ if (tenBtn) {
 }
 
 console.log('\n[5] 路由与占位功能');
-const hashListeners = [];
-sandbox.location.replace = function (h) { this.hash = h; };
-App.modes.list.slice(1).forEach((m) => {
-  check(`占位功能 ${m.id} 存在于注册表且标记未开放`, m.available === false);
-});
-App.modes.list.slice(1).forEach((m) => {
+const placeholders = App.modes.list.filter((m) => !m.available);
+const openModes = App.modes.list.filter((m) => m.available);
+check('已开放的功能是抛硬币与掷骰子',
+  openModes.map((m) => m.id).join(',') === 'coin,dice', openModes.map((m) => m.id).join(','));
+check('占位功能剩 2 个（随机数字 / 转盘抽签）', placeholders.length === 2,
+  placeholders.map((m) => m.id).join(','));
+placeholders.forEach((m) => {
+  check(`占位功能 ${m.id} 标记为未开放`, m.available === false);
   const probe = new Element('main');
   m.mount(probe, { setActions() {}, isActive: () => true });
   check(`占位功能 ${m.id} 可渲染`, probe.querySelector('.placeholder') !== null);
@@ -694,11 +706,20 @@ check('历史已清空', App.store.getHistory().length === 0);
 {
   App.store.record('heads');
   App.store.pushHistory({ face: 'heads', at: Date.now() });
-  check('按钮点击前有数据', App.store.getStats().total === 1);
+  App.store.recordDice([3, 5], 6);
+  App.store.pushDiceHistory({ values: [3, 5], sum: 8, faces: 6, at: Date.now() });
+  check('按钮点击前抛硬币与掷骰子都有数据',
+    App.store.getStats().total === 1 && App.store.getDiceStats().rolls === 1,
+    `coin=${App.store.getStats().total} dice=${App.store.getDiceStats().rolls}`);
   doc._registry.resetStats.click();
   check('顶部栏「清空统计」按钮生效',
     App.store.getStats().total === 0 && App.store.getHistory().length === 0,
     `total=${App.store.getStats().total} history=${App.store.getHistory().length}`);
+  check('「清空统计」把掷骰子的统计与历史也一起清了（按钮说的是「全部」）',
+    App.store.getDiceStats().rolls === 0 && App.store.getDiceStats().dice === 0 &&
+    App.store.getDiceHistory().length === 0,
+    `rolls=${App.store.getDiceStats().rolls} dice=${App.store.getDiceStats().dice} ` +
+    `history=${App.store.getDiceHistory().length}`);
 }
 
 console.log('\n[8] 顶部栏：更多选项下拉与开关');
@@ -834,6 +855,227 @@ console.log('\n[8] 顶部栏：更多选项下拉与开关');
     check('探针功能已从注册表移除', App.modes.get('probe-settings') === null);
     check('切来切去之后视图里仍是硬币', view.querySelector('.entropy') !== null);
   }
+}
+
+console.log('\n[9] 掷骰子');
+{
+  App.store.resetDiceStats();
+  sandbox.location.hash = '#/dice';
+  sandbox.dispatch('hashchange');
+
+  check('路由能切到掷骰子', view.querySelector('.dice-tray') !== null);
+  check('页面标题跟着换', doc.title === 'ChOIceN · 掷骰子', doc.title);
+  check('随机源面板在掷骰子页也能用（与抛硬币共用同一个组件）',
+    view.querySelector('.entropy') !== null);
+
+  // 「显示随机源」是全局开关，在掷骰子页同样要生效
+  const panel = doc._registry.morePanel;
+  const entInput = panel.querySelectorAll('input')[1];
+  entInput.checked = false;
+  entInput.dispatch('change');
+  check('掷骰子页能隐藏随机源面板', view.querySelector('.entropy').hidden === true,
+    `hidden=${view.querySelector('.entropy').hidden}`);
+  entInput.checked = true;
+  entInput.dispatch('change');
+  check('重新打开后恢复显示', view.querySelector('.entropy').hidden === false);
+
+  const dice = sandbox.__dice;
+  check('骰子元件已挂载并暴露给调试', !!dice && typeof dice.roll === 'function');
+
+  /* ---- 默认参数与参数选择器 ---- */
+  check('默认 2 颗骰子',
+    dice.getCount() === 2 && view.querySelectorAll('.die-slot').length === 2,
+    `${dice.getCount()} / ${view.querySelectorAll('.die-slot').length}`);
+  check('默认 6 面', dice.getFaces() === 6, String(dice.getFaces()));
+  check('还没掷过时骰子是空面（不假装有个结果）', view.querySelectorAll('.die__pip').length === 0);
+
+  const picks = view.querySelectorAll('.picker');
+  check('有两个参数选择器（颗数 / 面数）', picks.length === 2, `count=${picks.length}`);
+  const countBtns = picks[0].querySelectorAll('.picker__btn');
+  const faceBtns = picks[1].querySelectorAll('.picker__btn');
+  check('颗数选择器有 6 个选项（1–6）',
+    countBtns.map((b) => b.textContent).join(',') === '1,2,3,4,5,6',
+    countBtns.map((b) => b.textContent).join(','));
+  check('面数选择器是 4/6/8/10/12/20',
+    faceBtns.map((b) => b.textContent).join(',') === '4,6,8,10,12,20',
+    faceBtns.map((b) => b.textContent).join(','));
+  const pressed = (root) => root.querySelectorAll('.picker__btn')
+    .filter((b) => b.getAttribute('aria-pressed') === 'true');
+  check('每个选择器只有一个选中项',
+    pressed(picks[0]).length === 1 && pressed(picks[1]).length === 1,
+    `${pressed(picks[0]).length} / ${pressed(picks[1]).length}`);
+
+  /*
+   * 点选之后高光必须跟着走。
+   * 这条断言是补上的：之前只验了「初始值正确」，于是「点了按钮高光不动」
+   * 一路发到了用户手上 —— picker() 当初把 aria-pressed 的更新甩给 onChange，
+   * 而没有任何人调用 setValue。现在高亮由 picker 自己维护，这里守住它。
+   */
+  countBtns[2].click();                       // 3 颗
+  check('点「3」后高光移到「3」，不是只有初始值对',
+    pressed(picks[0]).length === 1 && pressed(picks[0])[0].textContent === '3',
+    pressed(picks[0]).map((b) => b.textContent).join(',') || '（没有选中项）');
+  check('取消选中的按钮 aria-pressed 变回 false',
+    countBtns[0].getAttribute('aria-pressed') === 'false' &&
+    countBtns[3].getAttribute('aria-pressed') === 'false',
+    `${countBtns[0].getAttribute('aria-pressed')} / ${countBtns[3].getAttribute('aria-pressed')}`);
+  faceBtns[2].click();                        // d8
+  check('面数选择器同样会跟着走（高光移到「8」）',
+    pressed(picks[1]).length === 1 && pressed(picks[1])[0].textContent === '8',
+    pressed(picks[1]).map((b) => b.textContent).join(',') || '（没有选中项）');
+  faceBtns[1].click();                        // 切回 d6，后面按 d6 验
+  check('切回 d6 后高光也在 d6 上',
+    pressed(picks[1]).length === 1 && pressed(picks[1])[0].textContent === '6',
+    pressed(picks[1]).map((b) => b.textContent).join(',') || '（没有选中项）');
+
+  /* ---- 掷一次：结果 / 统计 / 历史 / 分布 ---- */
+  /*
+   * 注意：桩里的 matches() 只认单个简单选择器（.class / #id / tag），
+   * 不支持 `.stage__actions .btn` 这种后代组合子（写了会静默匹配到 0 个）。
+   * 所以先从容器取到节点，再在它下面找。
+   */
+  const actions = view.querySelector('.stage__actions');
+  check('动作区还在', !!actions);
+  const actionBtns = actions ? actions.querySelectorAll('.btn') : [];
+  check('动作区只有「掷一次」和「重置骰子」两个按钮',
+    actionBtns.length === 2 &&
+    actionBtns[0].textContent.includes('掷一次') &&
+    actionBtns[1].textContent.includes('重置骰子'),
+    actionBtns.map((b) => b.textContent.trim()).join(' | ') || '（没找到）');
+  check('骰子页不再有「连掷」按钮（按需求移除，硬币页的「连抛 10 次」不受影响）',
+    !view.querySelectorAll('.btn').some((b) => b.textContent.includes('连掷')),
+    view.querySelectorAll('.btn').map((b) => b.textContent.trim()).join(' | '));
+
+  const rollBtn = view.querySelector('.btn--primary');
+  check('找到「掷一次」按钮', !!rollBtn);
+
+  const n = dice.getCount();
+  const callsBefore = App.rng.info().calls;
+  rollBtn.click();
+  await sleep(40);
+  check('掷骰中按钮被禁用', rollBtn.disabled === true);
+  await waitFor(() => !dice.isRolling());
+  await sleep(40);
+  const rngSpent = App.rng.info().calls - callsBefore;
+  check('按钮恢复可用', rollBtn.disabled === false);
+
+  const ds = App.store.getDiceStats();
+  check('统计记录了一次掷骰', ds.rolls === 1, `rolls=${ds.rolls}`);
+  check('累计骰子数 = 颗数', ds.dice === n, `dice=${ds.dice}`);
+  /*
+   * 翻滚动画里闪动的「假面」用的是元件内部的本地 PRNG，绝不能消耗 App.rng。
+   * 如果哪天有人图省事改成 App.rng.int(...)，这里会立刻炸：
+   * 2 颗骰子 720ms、每 70ms 换一次面 ≈ 20 次取值，远大于容差 2。
+   */
+  check('一次掷骰只按颗数消耗随机数（翻滚动画不碰随机源）',
+    rngSpent >= n && rngSpent <= n + 2, `calls +${rngSpent} / 颗数 ${n}`);
+
+  const dh = App.store.getDiceHistory();
+  check('历史写入一条', dh.length === 1, `len=${dh.length}`);
+  const entry = dh[0];
+  check('记录了每颗骰子的点数',
+    Array.isArray(entry.values) && entry.values.length === n, JSON.stringify(entry.values));
+  check('d6 的点数都落在 1–6',
+    entry.values.every((v) => v >= 1 && v <= 6), JSON.stringify(entry.values));
+  check('总和 = 各点数之和',
+    entry.sum === entry.values.reduce((a, b) => a + b, 0), `sum=${entry.sum}`);
+  check('骰子落定面就是记录下来的结果',
+    dice.getValues().join(',') === entry.values.join(','), dice.getValues().join(','));
+  check('结果区显示总和',
+    view.querySelector('.stage__status-main').textContent === '总和 ' + entry.sum,
+    view.querySelector('.stage__status-main').textContent);
+  check('状态切到 sum（触发落定闪光）',
+    view.querySelector('.stage__status').dataset.state === 'sum',
+    view.querySelector('.stage__status').dataset.state);
+
+  const cols = view.querySelectorAll('.dist__col');
+  check('分布图列数 = 面数', cols.length === 6, `count=${cols.length}`);
+  check('分布图列标签是 1–6',
+    cols.map((c) => c.querySelector('.dist__label').textContent).join(',') === '1,2,3,4,5,6',
+    cols.map((c) => c.querySelector('.dist__label').textContent).join(','));
+  const bucket = App.store.getDiceStats().dist['6'] || {};
+  check('本次点数都落进对应的桶',
+    entry.values.every((v) => (Number(bucket[String(v)]) || 0) >= 1), JSON.stringify(bucket));
+  check('分布桶累计 = 已掷骰子数',
+    Object.keys(bucket).reduce((a, k) => a + (Number(bucket[k]) || 0), 0) === n,
+    JSON.stringify(bucket));
+
+  /* ---- 改颗数 ---- */
+  countBtns[3].click();
+  check('点「4」后变成 4 颗', dice.getCount() === 4, String(dice.getCount()));
+  check('颗数高光跟着移到「4」',
+    pressed(picks[0]).length === 1 && pressed(picks[0])[0].textContent === '4',
+    pressed(picks[0]).map((b) => b.textContent).join(',') || '（没有选中项）');
+  check('骰子窗口里出现 4 颗', view.querySelectorAll('.die-slot').length === 4,
+    `count=${view.querySelectorAll('.die-slot').length}`);
+  check('颗数写入偏好', App.store.read('dicePrefs', {}).count === 4,
+    JSON.stringify(App.store.read('dicePrefs', {})));
+  check('改颗数后结果区清空（旧的金额/点数对不上新颗数，留着会误导）',
+    view.querySelector('.stage__status-main').textContent === '准备好了吗？',
+    view.querySelector('.stage__status-main').textContent);
+  check('改颗数不会把面数也换掉', dice.getFaces() === 6, String(dice.getFaces()));
+
+  /* ---- 切到 d20 ---- */
+  faceBtns[5].click();
+  check('切到 20 面', dice.getFaces() === 20, String(dice.getFaces()));
+  check('面数高光跟着移到「20」',
+    pressed(picks[1]).length === 1 && pressed(picks[1])[0].textContent === '20',
+    pressed(picks[1]).map((b) => b.textContent).join(',') || '（没有选中项）');
+  check('切面数不会把颗数也换掉', dice.getCount() === 4, String(dice.getCount()));
+  check('面数写入偏好', App.store.read('dicePrefs', {}).faces === 20,
+    JSON.stringify(App.store.read('dicePrefs', {})));
+  check('分布图跟着换成 20 列', view.querySelectorAll('.dist__col').length === 20,
+    `count=${view.querySelectorAll('.dist__col').length}`);
+
+  rollBtn.click();
+  await waitFor(() => !dice.isRolling());
+  await sleep(40);
+  const h2 = App.store.getDiceHistory()[0];
+  check('d20 的 4 颗结果都落在 1–20',
+    h2.values.every((v) => v >= 1 && v <= 20), JSON.stringify(h2.values));
+  check('这一条历史记的是 20 面', h2.faces === 20, String(h2.faces));
+  check('非 d6 用数字面渲染（点数画不下 d20）',
+    view.querySelectorAll('.die__num').length === 4,
+    `nums=${view.querySelectorAll('.die__num').length}`);
+  check('d20 不再画点阵', view.querySelectorAll('.die__pip').length === 0,
+    `pips=${view.querySelectorAll('.die__pip').length}`);
+  check('累计掷骰次数 = 2', App.store.getDiceStats().rolls === 2,
+    String(App.store.getDiceStats().rolls));
+  check('d20 的分布与 d6 分开分桶（换面数后口径不同，不能混在一起画）',
+    Object.keys(App.store.getDiceStats().dist).sort().join(',') === '20,6',
+    Object.keys(App.store.getDiceStats().dist).join(','));
+
+  /* ---- 重置 ---- */
+  const resetBtn = view.querySelectorAll('.btn').find((b) => b.textContent.includes('重置'));
+  check('找到「重置骰子」按钮', !!resetBtn);
+  resetBtn.click();
+  check('重置后骰子回到空面',
+    dice.getValues().every((v) => v === 0), JSON.stringify(dice.getValues()));
+  check('重置不清统计', App.store.getDiceStats().rolls === 2,
+    String(App.store.getDiceStats().rolls));
+
+  /* ---- 慢动作联动 + 销毁必须退订 ---- */
+  const diceA = sandbox.__dice;
+  check('初始速度系数为 1', diceA.getSpeedFactor() === 1, String(diceA.getSpeedFactor()));
+  const slowInput = panel.querySelectorAll('input')[0];
+  slowInput.checked = true;
+  slowInput.dispatch('change');
+  check('打开慢动作后骰子速度系数变为 1.8',
+    diceA.getSpeedFactor() === 1.8, String(diceA.getSpeedFactor()));
+
+  sandbox.location.hash = '#/coin';
+  sandbox.dispatch('hashchange');
+  check('切回抛硬币视图', view.querySelector('.coin-area') !== null);
+  check('硬币页的「连抛 10 次」还在（只移除了骰子那边的连掷）',
+    view.querySelectorAll('.btn').some((b) => b.textContent.includes('连抛 10 次')),
+    view.querySelectorAll('.btn').map((b) => b.textContent.trim()).join(' | '));
+  slowInput.checked = false;
+  slowInput.dispatch('change');
+  check('已销毁的骰子视图不再收到广播（destroy 里退订生效）',
+    diceA.getSpeedFactor() === 1.8, `destroyed dice speed=${diceA.getSpeedFactor()}`);
+  check('新挂载的硬币视图收到了这次设置',
+    sandbox.__coin && sandbox.__coin.getSpeedFactor() === 1,
+    String(sandbox.__coin && sandbox.__coin.getSpeedFactor()));
 }
 
 console.log(`\n${failures === 0 ? '全部通过 ✅' : failures + ' 项失败 ❌'}\n`);

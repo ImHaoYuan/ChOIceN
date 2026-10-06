@@ -104,10 +104,11 @@
     });
   }
 
-  /** 清空统计按钮（侧边栏与设置面板各有一个，共用逻辑） */
+  /** 清空统计按钮（顶部栏那个）。抛硬币与掷骰子的记录一起清掉 —— 按钮写的是「全部」。 */
   function resetStatsNow() {
-    if (!global.confirm('确定清空全部抛掷统计与历史记录吗？此操作不可撤销。')) return;
+    if (!global.confirm('确定清空全部统计与历史记录（抛硬币 + 掷骰子）吗？此操作不可撤销。')) return;
     App.store.resetStats();
+    App.store.resetDiceStats();
     App.rng.reseed();
     render();
     ui.toast('统计与历史已清空');

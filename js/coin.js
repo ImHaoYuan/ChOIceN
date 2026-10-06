@@ -32,7 +32,6 @@
       '<span class="face-marks"></span>' +
       '<span class="coin__glyph">' + f.glyph + '</span>' +
       '<span class="coin__caption">' + f.caption + '</span>' +
-      '<span class="coin__year">· 时 间 随 机 ·</span>' +
     '</div>';
   }
 

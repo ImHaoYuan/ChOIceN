@@ -36,6 +36,20 @@
 
   const DEFAULT_STATS = { heads: 0, tails: 0, total: 0, lastAt: 0 };
 
+  /*
+   * 掷骰子的统计形状与抛硬币完全不同（一次掷多颗、还要看点数分布），
+   * 所以单独一个键，用 recordDice / getDiceStats 这组接口，不去动上面那套。
+   *   rolls  掷了多少次（一次可含多颗骰子）
+   *   dice   累计掷出多少颗骰子
+   *   sum    累计点数之和
+   *   dist   点数分布，按面数分桶：{ "6": { "1": 12, ... }, "20": {...} }
+   *          分桶是必须的 —— 换成 d20 之后，d6 时代的点数分布口径就变了，
+   *          混在一个桶里画出来的图没有意义。
+   */
+  const DEFAULT_DICE_STATS = {
+    rolls: 0, dice: 0, sum: 0, lastSum: 0, lastAt: 0, faces: 6, dist: {}
+  };
+
   const DEFAULT_SETTINGS = {
     sound: true,          // 音效
     slowMotion: false,    // 慢动作（1.8×）
@@ -45,7 +59,13 @@
   };
 
   App.store = {
-    keys: { stats: 'stats', history: 'history', settings: 'settings' },
+    keys: {
+      stats: 'stats',
+      history: 'history',
+      settings: 'settings',
+      diceStats: 'diceStats',
+      diceHistory: 'diceHistory'
+    },
 
     /* ---- 抛硬币统计 ---- */
     getStats() {
@@ -87,6 +107,73 @@
       h.unshift(entry);
       if (h.length > HISTORY_LIMIT) h.length = HISTORY_LIMIT;
       write('history', h);
+      return h;
+    },
+
+    /* ---- 掷骰子统计（与抛硬币分开存，互不影响） ---- */
+    getDiceStats() {
+      const s = read('diceStats', null);
+      if (!s || typeof s !== 'object') return Object.assign({}, DEFAULT_DICE_STATS, { dist: {} });
+      return {
+        rolls: Number(s.rolls) || 0,
+        dice: Number(s.dice) || 0,
+        sum: Number(s.sum) || 0,
+        lastSum: Number(s.lastSum) || 0,
+        lastAt: Number(s.lastAt) || 0,
+        faces: Number(s.faces) || 6,
+        dist: (s.dist && typeof s.dist === 'object' && !Array.isArray(s.dist)) ? s.dist : {}
+      };
+    },
+
+    /**
+     * 记录一次掷骰。
+     * @param {number[]} values 本次每颗骰子的点数
+     * @param {number} faces    本次用的面数（点数分布按它分桶）
+     * @returns {object} 新的统计对象
+     */
+    recordDice(values, faces) {
+      const list = Array.isArray(values) ? values : [];
+      const s = this.getDiceStats();
+      const f = Number(faces) || s.faces || 6;
+      let sum = 0;
+      for (let i = 0; i < list.length; i++) sum += Number(list[i]) || 0;
+
+      s.rolls += 1;
+      s.dice += list.length;
+      s.sum += sum;
+      s.lastSum = sum;
+      s.lastAt = Date.now();
+      s.faces = f;
+
+      const key = String(f);
+      const bucket = Object.assign({}, s.dist[key] || {});
+      list.forEach(function (v) {
+        const k = String(v);
+        bucket[k] = (Number(bucket[k]) || 0) + 1;
+      });
+      s.dist[key] = bucket;
+
+      write('diceStats', s);
+      return s;
+    },
+
+    resetDiceStats() {
+      write('diceStats', Object.assign({}, DEFAULT_DICE_STATS, { dist: {} }));
+      write('diceHistory', []);
+      return this.getDiceStats();
+    },
+
+    /* ---- 掷骰子历史（最新在前，最多 HISTORY_LIMIT 条） ---- */
+    getDiceHistory() {
+      const h = read('diceHistory', []);
+      return Array.isArray(h) ? h : [];
+    },
+
+    pushDiceHistory(entry) {
+      const h = this.getDiceHistory();
+      h.unshift(entry);
+      if (h.length > HISTORY_LIMIT) h.length = HISTORY_LIMIT;
+      write('diceHistory', h);
       return h;
     },
 
