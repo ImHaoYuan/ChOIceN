@@ -54,8 +54,8 @@
     sound: true,          // 音效
     slowMotion: false,    // 慢动作（1.8×）
     showEntropy: true,    // 显示随机源诊断面板
-    theme: 'auto',        // 主题：auto（按时间）/ light / dark
-    rngSource: 'hybrid'   // 随机源：hybrid（混合）/ crypto（加密）/ time（时间）
+    theme: 'auto'         // 主题：auto（按时间）/ light / dark
+    // 随机源刻意不在这里：它每次打开都回到默认的「混合」，不进偏好
   };
 
   App.store = {

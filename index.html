@@ -54,12 +54,12 @@
   </a>
 
   <nav class="topbar__nav" aria-label="功能分类">
-    <!-- 清空统计：从侧边栏移到这里，放在「随机源」左侧 -->
-    <button id="resetStats" class="icon-btn" type="button" title="清空全部统计与历史记录（抛硬币 + 掷骰子）">
+    <!-- 清空统计：只清当前这个功能的记录（关于页会置灰），放在「随机源」左侧 -->
+    <button id="resetStats" class="icon-btn" type="button" title="清空当前功能的统计与历史记录">
       <span class="icon-btn__icon" aria-hidden="true">🧹</span>
       <span class="icon-btn__text" data-i18n="sidebar.reset">清空统计</span>
     </button>
-    <!-- 随机源：点按循环 混合 → 加密 → 时间，与主题按钮同一套交互 -->
+    <!-- 随机源：点按循环 混合 → 加密 → 时间，与主题按钮同一套交互；不进偏好，刷新回到混合 -->
     <button id="sourceToggle" class="icon-btn" type="button" title="随机源（点按循环切换）">
       <span class="icon-btn__icon" id="sourceIcon" aria-hidden="true">🔀</span>
       <span class="icon-btn__text" id="sourceName">混合</span>
@@ -76,7 +76,7 @@
     <div class="menu" id="moreMenu">
       <button id="moreToggle" class="icon-btn" type="button"
               aria-haspopup="true" aria-expanded="false" aria-controls="morePanel"
-              title="更多选项：慢动作 / 显示随机源">
+              title="更多选项：慢动作 / 显示随机源 / 关于">
         <span class="icon-btn__icon" aria-hidden="true">⚙️</span>
         <span class="icon-btn__text">更多选项</span>
       </button>
@@ -97,7 +97,15 @@
     </nav>
 
     <div class="sidebar__foot">
-      <p class="sidebar__hint" data-i18n="sidebar.hint">后续功能将以同样的卡片形式加入，接口已预留。</p>
+      <!-- 关于页入口（桌面端）。窄屏时侧边栏底部会被隐藏，
+           所以「更多选项」下拉里还有一个同样的入口，见 js/app.js。 -->
+      <button id="aboutLink" class="sidebar__link" type="button" aria-current="false">
+        <span class="sidebar__link-icon" aria-hidden="true">ℹ️</span>
+        <span class="sidebar__link-body">
+          <span class="sidebar__link-name">关于 ChOIceN</span>
+          <span class="sidebar__link-desc">随机原理与使用说明</span>
+        </span>
+      </button>
     </div>
   </aside>
 
@@ -118,6 +126,7 @@
 <script src="js/coin.js"></script>
 <script src="js/entropy.js"></script>
 <script src="js/dice.js"></script>
+<script src="js/about.js"></script>
 <script src="js/modes.js"></script>
 <script src="js/app.js"></script>
 </body>

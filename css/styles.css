@@ -266,6 +266,11 @@ code {
 }
 .icon-btn:hover { background: var(--surface-strong); color: var(--text); border-color: var(--border-strong); }
 .icon-btn:active { transform: scale(0.96); }
+/* 置灰态（「清空统计」在关于页没有可清的东西）：
+   按钮禁用后 :hover 依然会被浏览器匹配，所以要把 hover 那套颜色也压回去，
+   否则鼠标移上去看着还像能点。 */
+.icon-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+.icon-btn[disabled]:hover { background: var(--surface); color: var(--text-soft); border-color: var(--border); }
 .icon-btn[aria-pressed="false"] { color: var(--text-dim); opacity: 0.75; }
 .icon-btn__text { font-size: 13px; }
 
@@ -344,7 +349,34 @@ code {
 }
 
 .sidebar__foot { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--border); }
-.sidebar__hint { font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }
+
+/* 关于页入口。样式跟着 .mode-card 走，但它是「信息页」不是功能，
+   所以没有 mode-card 类，免得被导航相关断言和样式当成一张功能卡。 */
+.sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+  transition: border-color .2s, background .2s, color .2s;
+}
+.sidebar__link:hover {
+  border-color: var(--border);
+  background: var(--surface);
+}
+.sidebar__link[aria-current="true"] {
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+}
+.sidebar__link-icon { font-size: 15px; line-height: 1; flex: none; opacity: 0.9; }
+.sidebar__link-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sidebar__link-name { font-size: 12.5px; font-weight: 600; color: var(--text-soft); }
+.sidebar__link-desc { font-size: 11px; color: var(--text-dim); }
 
 /* 注意：「清空统计」按钮已移到顶部栏（index.html 的 #resetStats），
    原先这里的 .link-btn 样式随之删除，避免留下死样式。 */
@@ -371,6 +403,17 @@ code {
   word-break: break-word;
 }
 .view-head__badge { font-size: 18px; }
+
+/* 功能页简介末尾指向「关于」的小链接 */
+.view-head__more {
+  margin-left: 6px;
+  font-size: 13px;
+  color: var(--gold);
+  text-decoration: none;
+  border-bottom: 1px solid var(--gold-line);
+  white-space: nowrap;
+}
+.view-head__more:hover { border-bottom-color: var(--gold); }
 
 .panel {
   border-radius: var(--radius-lg);
@@ -1051,7 +1094,71 @@ code {
 .entropy__item { white-space: nowrap; }
 .entropy__row b { color: var(--text-soft); font-weight: 600; }
 
-/* ===== 9. 顶部栏下拉列表（更多选项） =====
+/* ===== 9. 关于页 =====
+   功能页只留一行简介，长文都在这儿。用 .panel 承载每一节，
+   阅读宽度靠 .about 限制，避免宽屏下一行拉得太长。 */
+.about { max-width: 760px; }
+.about__section { padding: 20px 22px; }
+.about__section + .about__section { margin-top: 14px; }
+.about__title {
+  font-size: 17px;
+  letter-spacing: .3px;
+  margin-bottom: 10px;
+}
+.about__sub {
+  margin: 16px 0 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--gold);
+}
+.about__p {
+  color: var(--text-soft);
+  font-size: 13.5px;
+  line-height: 1.85;
+  /* 中文长句没有空格，必须允许在任意位置断行（同 .view-head p） */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.about__p + .about__p { margin-top: 10px; }
+.about__list {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--text-soft);
+  font-size: 13.5px;
+  line-height: 1.85;
+}
+.about__list li { margin-top: 4px; }
+.about__list li::marker { color: var(--gold); }
+
+/* 术语表：桌面端左列固定宽度，窄屏自动堆成上下两行 */
+.about__dl {
+  margin: 10px 0 0;
+  display: grid;
+  grid-template-columns: minmax(84px, max-content) minmax(0, 1fr);
+  gap: 6px 14px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.about__term { color: var(--text); font-weight: 600; }
+.about__desc { color: var(--text-soft); }
+
+/* 需要说清楚的边注（例如「真随机」的边界） */
+.about__note {
+  margin-top: 12px;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--gold-line-strong);
+  background: var(--gold-soft);
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.about__link { margin-top: 12px; }
+.about__link a { color: var(--gold); border-bottom: 1px solid var(--gold-line); text-decoration: none; }
+.about__link a:hover { border-bottom-color: var(--gold); }
+
+/* ===== 10. 顶部栏下拉列表（更多选项） =====
    原来的「通用设置面板」(.settings / .setting-item) 与随机源分段控件 (.seg)
    已经随页面最下方那一排设置一起移除，开关都搬进这里了。 */
 .menu { position: relative; display: inline-flex; }
@@ -1079,6 +1186,33 @@ code {
   flex-direction: column;
   gap: 11px;
 }
+.menu__sep {
+  margin: 11px 0;
+  border-top: 1px dashed var(--border);
+}
+/* 面板里的跳转项（目前只有「关于」）。开关行用 .switch，这里要的是
+   一行可点的条目，所以单独一套，hover/焦点反馈与开关行保持一致。 */
+.menu__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 9px;
+  margin: -8px -9px;
+  border-radius: var(--radius-sm);
+  border: 0;
+  background: none;
+  color: var(--text-soft);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background .18s, color .18s;
+}
+.menu__item:hover,
+.menu__item:focus-visible { background: var(--surface-strong); color: var(--text); }
+.menu__item-icon { font-size: 14px; line-height: 1; flex: none; }
+.menu__item-text { flex: 1 1 auto; min-width: 0; }
+.menu__item-arrow { color: var(--text-dim); flex: none; }
 /* 展开时按钮保持高亮，让「面板是从这里弹出来的」一目了然 */
 .menu--open > .icon-btn {
   background: var(--surface-strong);
@@ -1151,7 +1285,7 @@ code {
 }
 .placeholder__roadmap li::marker { color: var(--gold); }
 
-/* ===== 10. 响应式与无障碍 ===== */
+/* ===== 11. 响应式与无障碍 ===== */
 @media (max-width: 900px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
   .sidebar { position: static; }
@@ -1193,6 +1327,11 @@ code {
   .dice-tray { --die-size: 56px; gap: 9px; }
   .picker__label { min-width: 100%; }
   .dist__bars { height: 140px; }
+
+  /* 关于页：术语表在窄屏堆成上下两行，否则左列会把解释挤成一条 */
+  .about__section { padding: 16px 15px; }
+  .about__dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .about__desc { margin-bottom: 8px; }
 }
 
 @media (max-width: 400px) {

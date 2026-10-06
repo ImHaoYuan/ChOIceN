@@ -13,7 +13,8 @@
 
   const viewEl = doc.getElementById('view');
   const navEl = doc.getElementById('navList');
-  let current = null;        // 当前功能
+  const aboutLink = doc.getElementById('aboutLink');
+  let current = null;        // 当前页面（功能或信息页）
   let cleanup = null;        // 上一个视图的清理函数
   let settings = App.store.getSettings();
 
@@ -104,14 +105,55 @@
     });
   }
 
-  /** 清空统计按钮（顶部栏那个）。抛硬币与掷骰子的记录一起清掉 —— 按钮写的是「全部」。 */
+  /* ---------------------------------------------------------
+     清空统计按钮（顶部栏那个）
+     只清「当前这个功能」的记录：抛硬币页清抛硬币的，掷骰子页清掷骰子的。
+     关于页不是功能、没有属于它的统计，按钮在那边直接置灰（syncResetButton）。
+     两个功能各清各的，所以按当前页面分派，而不是一起清。
+
+     新功能如果也有自己的统计，要在这里加一条；没加的话那个功能页上的按钮是灰的
+     ——这是刻意的兜底：不知道该清什么，就别清（见 README 第 8 节）。
+     --------------------------------------------------------- */
+  const CLEAR_SCOPE = {
+    coin: {
+      name: '抛硬币',
+      confirm: '确定清空抛硬币的统计与历史记录吗？掷骰子的记录不受影响。此操作不可撤销。',
+      done: '抛硬币的统计与历史已清空',
+      clear: function () { App.store.resetStats(); }
+    },
+    dice: {
+      name: '掷骰子',
+      confirm: '确定清空掷骰子的统计与历史记录吗？抛硬币的记录不受影响。此操作不可撤销。',
+      done: '掷骰子的统计与历史已清空',
+      clear: function () { App.store.resetDiceStats(); }
+    }
+  };
+
+  function clearScopeFor(page) {
+    return page && CLEAR_SCOPE[page.id] ? CLEAR_SCOPE[page.id] : null;
+  }
+
+  /** 顶部栏「清空统计」按钮跟着当前页面走：功能页可点，信息页置灰并说明原因 */
+  function syncResetButton(page) {
+    const btn = doc.getElementById('resetStats');
+    if (!btn) return;
+    const scope = clearScopeFor(page);
+    btn.disabled = !scope;
+    btn.setAttribute('aria-disabled', scope ? 'false' : 'true');
+    btn.title = scope
+      ? '清空' + scope.name + '的统计与历史记录（不影响另一个功能）'
+      : '「' + (page ? page.name : '这个页面') + '」没有可清空的统计';
+  }
+
   function resetStatsNow() {
-    if (!global.confirm('确定清空全部统计与历史记录（抛硬币 + 掷骰子）吗？此操作不可撤销。')) return;
-    App.store.resetStats();
-    App.store.resetDiceStats();
+    const scope = clearScopeFor(current);
+    // 置灰后正常点不到；这里再挡一次，免得程序化 click() 或旧引用绕过去
+    if (!scope) return;
+    if (!global.confirm(scope.confirm)) return;
+    scope.clear();
     App.rng.reseed();
     render();
-    ui.toast('统计与历史已清空');
+    ui.toast(scope.done);
   }
 
   /* ---------------------------------------------------------
@@ -167,6 +209,8 @@
     Array.prototype.forEach.call(navEl.querySelectorAll('.mode-card'), function (card) {
       card.setAttribute('aria-current', card.dataset.mode === id ? 'true' : 'false');
     });
+    // 「关于」不是功能卡，它的入口在侧边栏底部，单独同步一次
+    if (aboutLink) aboutLink.setAttribute('aria-current', id === 'about' ? 'true' : 'false');
   }
 
   /* ---------------------------------------------------------
@@ -178,24 +222,42 @@
     return id || App.modes.defaultId;
   }
 
+  /**
+   * 找出 hash 对应的页面：先查功能（App.modes），再查信息页（App.pages）。
+   * 信息页不进 App.modes.list —— 否则侧边导航会多出一张「功能」卡、
+   * Alt+N 会多一号，还会打破「已开放的功能只有抛硬币与掷骰子」这条语义。
+   */
+  function resolvePage(id) {
+    const mode = App.modes.get(id);
+    if (mode && mode.available) return mode;
+    return App.pages ? App.pages.get(id) : null;
+  }
+
   function render() {
     let id = routeId();
-    let mode = App.modes.get(id);
-    if (!mode || !mode.available) {
+    let page = resolvePage(id);
+    if (!page) {
       if (id !== App.modes.defaultId) {
         ui.toast('没有找到该功能，已回到抛硬币');
       }
       id = App.modes.defaultId;
-      mode = App.modes.get(id);
+      page = resolvePage(id);
       global.location.replace('#/' + id);
     }
 
     if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
+    /*
+     * 「关于」是长文：挂载前先把 live region 关掉，否则读屏软件会把整页念一遍。
+     * 顺序要紧——必须赶在清空/挂载之前改，改晚了这次变更已经进了播报队列。
+     * 页面用 quiet:true 声明这一点（见 js/about.js）。
+     */
+    viewEl.setAttribute('aria-live', page.quiet ? 'off' : 'polite');
     ui.clear(viewEl);
-    current = mode;
-    highlightNav(mode.id);
-    doc.title = 'ChOIceN · ' + mode.name;
-    cleanup = mode.mount(viewEl, ctx) || null;
+    current = page;
+    highlightNav(page.id);
+    syncResetButton(page);
+    doc.title = 'ChOIceN · ' + page.name;
+    cleanup = page.mount(viewEl, ctx) || null;
     global.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -267,7 +329,8 @@
 
     btn.addEventListener('click', function () {
       const next = App.rng.cycle();
-      App.store.setSetting('rngSource', next);
+      // 故意不写进偏好：随机源每次打开都回到默认的「混合」，
+      // 本次会话内的切换照常生效，但刷新就回到默认。
       ui.toast('随机源已切换为「' + App.rng.sourceLabel(next).name + '」' +
         (App.rng.hasCrypto ? '' : '（当前环境不支持 crypto）'));
     });
@@ -323,6 +386,31 @@
     });
 
     setOpen(false);
+
+    // 关于页入口（窄屏下侧边栏底部被隐藏，这里是唯一入口）。
+    // 面板内部的点击被 stopPropagation 挡住了 —— 那是为了让拨开关不关面板 ——
+    // 所以这里必须自己关，否则跳转过去后面板还开着。
+    const aboutItem = el('button.menu__item', {
+      type: 'button',
+      onclick: function () {
+        setOpen(false);
+        ctx.go('about');
+      }
+    }, [
+      el('span.menu__item-icon', { text: 'ℹ️', 'aria-hidden': 'true' }),
+      el('span.menu__item-text', { text: '关于 ChOIceN' }),
+      el('span.menu__item-arrow', { text: '›', 'aria-hidden': 'true' })
+    ]);
+    panel.appendChild(el('div.menu__sep'));
+    panel.appendChild(el('div.menu__list', [aboutItem]));
+  }
+
+  /* ---------------------------------------------------------
+     侧边栏：关于页入口
+     --------------------------------------------------------- */
+  function initAboutLink() {
+    if (!aboutLink) return;
+    aboutLink.addEventListener('click', function () { ctx.go('about'); });
   }
 
   /* ---------------------------------------------------------
@@ -354,12 +442,13 @@
      启动
      --------------------------------------------------------- */
   function boot() {
-    // 先定随机源：后续所有取值（含首屏那次预热）都要用它
-    App.rng.setSource(settings.rngSource);
+    // 随机源固定从内置默认值（hybrid）起步：它不进偏好，刷新即回到默认。
+    // 其余偏好（音效 / 慢动作 / 随机源面板显隐 / 主题 / 骰子偏好）仍然从 settings 恢复。
     buildNav();
     initTheme();
     initSource();
     initMoreMenu();
+    initAboutLink();
     initSound();
     initReset();
     initShortcuts();

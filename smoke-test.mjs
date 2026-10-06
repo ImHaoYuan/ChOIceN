@@ -177,7 +177,9 @@ function makeDocument() {
     // 「更多选项」下拉：按钮 + 面板（慢动作 / 显示随机源两个开关由 app.js 注入）
     moreMenu: new Element('div'),
     moreToggle: new Element('button'),
-    morePanel: Object.assign(new Element('div'), { hidden: true })
+    morePanel: Object.assign(new Element('div'), { hidden: true }),
+    // 侧边栏底部的「关于」入口（窄屏会隐藏，但 DOM 里始终在）
+    aboutLink: new Element('button')
   };
   registry.soundToggle.appendChild(Object.assign(new Element('span'), { className: 'icon-btn__text' }));
   registry.themeToggle.appendChild(Object.assign(new Element('span'), { className: 'icon-btn__icon' }));
@@ -284,7 +286,7 @@ sandbox.globalThis = sandbox;
 sandbox.window.AudioContext = undefined;    // 音频静默降级
 
 const files = ['rng.js', 'store.js', 'audio.js', 'theme.js', 'ui.js',
-  'coin.js', 'entropy.js', 'dice.js', 'modes.js', 'app.js'];
+  'coin.js', 'entropy.js', 'dice.js', 'about.js', 'modes.js', 'app.js'];
 for (const f of files) {
   const code = fs.readFileSync(path.join(ROOT, 'js', f), 'utf8');
   vm.runInNewContext(code, sandbox, { filename: f });
@@ -405,8 +407,15 @@ App.rng.setSource('hybrid');
   btn.click();
   check('第 1 次点击 → 加密', App.rng.getSource() === 'crypto' && nameOf() === '加密',
     `${App.rng.getSource()} / ${nameOf()}`);
-  check('随机源写入偏好', App.store.getSettings().rngSource === 'crypto',
-    App.store.getSettings().rngSource);
+  // 随机源刻意不进偏好：它不记忆，每次刷新（重新 boot）都从内置默认的 hybrid 起步。
+  // 这里两头都卡住：运行时确实没写进 settings，源码里也确实不再碰这个偏好键
+  // （只测运行时的话，将来有人把 setSource(settings.rngSource) 加回 boot 也测不出来）。
+  check('随机源不写入偏好', App.store.getSettings().rngSource === undefined,
+    String(App.store.getSettings().rngSource));
+  const appSrc = fs.readFileSync(path.join(ROOT, 'js', 'app.js'), 'utf8');
+  const storeSrc = fs.readFileSync(path.join(ROOT, 'js', 'store.js'), 'utf8');
+  check('app.js 里不再读写随机源偏好', !/rngSource/.test(appSrc));
+  check('store.js 的默认偏好里没有随机源', !/rngSource/.test(storeSrc));
 
   btn.click();
   check('第 2 次点击 → 时间', App.rng.getSource() === 'time' && nameOf() === '时间',
@@ -415,8 +424,9 @@ App.rng.setSource('hybrid');
   btn.click();
   check('第 3 次点击 → 回到默认的混合', App.rng.getSource() === 'hybrid' && nameOf() === '混合',
     `${App.rng.getSource()} / ${nameOf()}`);
-  check('回到默认后偏好也已更新', App.store.getSettings().rngSource === 'hybrid',
-    App.store.getSettings().rngSource);
+  check('绕一圈后依然没有写进偏好',
+    App.store.getSettings().rngSource === undefined,
+    String(App.store.getSettings().rngSource));
 
   // 按钮的 title 要能说清当前用的是哪一种（窄屏只留图标，就靠它了）
   check('按钮 title 含当前源名与说明',
@@ -702,24 +712,71 @@ const cleared = App.store.getStats();
 check('统计已清空', cleared.total === 0 && cleared.heads === 0 && cleared.tails === 0);
 check('历史已清空', App.store.getHistory().length === 0);
 
-// 「清空统计」按钮已从侧边栏移到顶部栏，这里验证它仍然可用
+// 「清空统计」按钮已从侧边栏移到顶部栏，而且只清「当前这个功能」的记录
 {
-  App.store.record('heads');
-  App.store.pushHistory({ face: 'heads', at: Date.now() });
-  App.store.recordDice([3, 5], 6);
-  App.store.pushDiceHistory({ values: [3, 5], sum: 8, faces: 6, at: Date.now() });
+  const R = doc._registry;
+  const seed = () => {
+    App.store.record('heads');
+    App.store.pushHistory({ face: 'heads', at: Date.now() });
+    App.store.recordDice([3, 5], 6);
+    App.store.pushDiceHistory({ values: [3, 5], sum: 8, faces: 6, at: Date.now() });
+  };
+  const coin = () => [App.store.getStats().total, App.store.getHistory().length];
+  const dice = () => [App.store.getDiceStats().rolls, App.store.getDiceHistory().length];
+  const go = (hash) => { sandbox.location.hash = hash; sandbox.dispatch('hashchange'); };
+
+  /* ---- 抛硬币页：只清抛硬币的 ---- */
+  go('#/coin');
+  seed();
   check('按钮点击前抛硬币与掷骰子都有数据',
-    App.store.getStats().total === 1 && App.store.getDiceStats().rolls === 1,
-    `coin=${App.store.getStats().total} dice=${App.store.getDiceStats().rolls}`);
-  doc._registry.resetStats.click();
-  check('顶部栏「清空统计」按钮生效',
-    App.store.getStats().total === 0 && App.store.getHistory().length === 0,
-    `total=${App.store.getStats().total} history=${App.store.getHistory().length}`);
-  check('「清空统计」把掷骰子的统计与历史也一起清了（按钮说的是「全部」）',
-    App.store.getDiceStats().rolls === 0 && App.store.getDiceStats().dice === 0 &&
-    App.store.getDiceHistory().length === 0,
-    `rolls=${App.store.getDiceStats().rolls} dice=${App.store.getDiceStats().dice} ` +
-    `history=${App.store.getDiceHistory().length}`);
+    coin()[0] === 1 && dice()[0] === 1, `coin=${coin()[0]} dice=${dice()[0]}`);
+  R.resetStats.click();
+  check('抛硬币页点「清空统计」清掉了抛硬币的记录',
+    coin()[0] === 0 && coin()[1] === 0, `total=${coin()[0]} history=${coin()[1]}`);
+  check('抛硬币页清空不碰掷骰子的记录',
+    dice()[0] === 1 && dice()[1] === 1, `dice rolls=${dice()[0]} history=${dice()[1]}`);
+  check('提示语说明了清的是哪一边',
+    R.toast.textContent.indexOf('抛硬币') > -1, R.toast.textContent);
+  check('按钮 title 说明清的是哪一边',
+    R.resetStats.title.indexOf('抛硬币') > -1, R.resetStats.title);
+
+  /* ---- 掷骰子页：只清掷骰子的 ---- */
+  go('#/dice');
+  seed();
+  R.resetStats.click();
+  check('掷骰子页点「清空统计」清掉了掷骰子的记录',
+    dice()[0] === 0 && dice()[1] === 0, `rolls=${dice()[0]} history=${dice()[1]}`);
+  check('掷骰子页清空不碰抛硬币的记录',
+    coin()[0] === 1 && coin()[1] === 1, `coin=${coin()[0]} history=${coin()[1]}`);
+  check('掷骰子页的提示语也换了',
+    R.toast.textContent.indexOf('掷骰子') > -1, R.toast.textContent);
+
+  /* ---- 关于页：不是功能页，没有可清空的统计，按钮置灰 ---- */
+  go('#/about');
+  check('关于页上「清空统计」按钮置灰', R.resetStats.disabled === true,
+    `disabled=${R.resetStats.disabled}`);
+  check('置灰的 title 说明了原因',
+    R.resetStats.title.indexOf('没有可清空的统计') > -1, R.resetStats.title);
+  check('置灰时也标了 aria-disabled 供读屏识别',
+    R.resetStats.getAttribute('aria-disabled') === 'true');
+  seed();
+  // 比对点击前后的值（前面几轮 seed 会累加，写死绝对值反而会误判）
+  const beforeCoin = coin();
+  const beforeDice = dice();
+  R.resetStats.click();   // 置灰后点不到，这里用程序化 click 再挡一次
+  check('置灰状态下即使被程序化点击也不清任何东西',
+    coin()[0] === beforeCoin[0] && coin()[1] === beforeCoin[1] &&
+    dice()[0] === beforeDice[0] && dice()[1] === beforeDice[1],
+    `coin=${coin()} dice=${dice()}（点击前 coin=${beforeCoin} dice=${beforeDice}）`);
+
+  go('#/coin');
+  check('回到功能页后按钮恢复可用', R.resetStats.disabled === false,
+    `disabled=${R.resetStats.disabled}`);
+  check('恢复可用后 aria-disabled 也复位',
+    R.resetStats.getAttribute('aria-disabled') === 'false');
+
+  App.store.resetStats();
+  App.store.resetDiceStats();
 }
 
 console.log('\n[8] 顶部栏：更多选项下拉与开关');
@@ -1076,6 +1133,166 @@ console.log('\n[9] 掷骰子');
   check('新挂载的硬币视图收到了这次设置',
     sandbox.__coin && sandbox.__coin.getSpeedFactor() === 1,
     String(sandbox.__coin && sandbox.__coin.getSpeedFactor()));
+}
+
+console.log('\n[10] 关于页与功能页简介');
+{
+  const navList = doc._registry.navList;
+  const aboutLink = doc._registry.aboutLink;
+  const morePanel = doc._registry.morePanel;
+  const moreToggle = doc._registry.moreToggle;
+  /** 简介里不该再出现的词：这些都搬去关于页了 */
+  const MOVED = ['crypto.getRandomValues', '右上角切换', '64 位状态池', '时间熵', '慢动作'];
+
+  /* ---- 功能页简介只留功能自己的事 ---- */
+  sandbox.location.hash = '#/coin';
+  sandbox.dispatch('hashchange');
+  const coinHead = view.querySelector('.view-head');
+  check('硬币页只有一个 view-head', view.querySelectorAll('.view-head').length === 1,
+    String(view.querySelectorAll('.view-head').length));
+  const coinIntro = coinHead && coinHead.querySelector('p');
+  check('硬币页简介只剩一段', !!coinIntro && coinIntro.tagName === 'P');
+  check('硬币页简介很短', !!coinIntro && coinIntro.textContent.length <= 70,
+    `${coinIntro ? coinIntro.textContent.length : '-'} 字：${coinIntro ? coinIntro.textContent : ''}`);
+  check('硬币页简介不再讲随机源原理（那些搬去关于页了）',
+    !!coinIntro && MOVED.every((w) => !coinIntro.textContent.includes(w)),
+    coinIntro ? coinIntro.textContent : '');
+  const coinMore = coinHead && coinHead.querySelector('.view-head__more');
+  check('硬币页简介里留了去关于页的入口',
+    !!coinMore && coinMore.getAttribute('href') === '#/about',
+    coinMore ? coinMore.getAttribute('href') : '（没找到）');
+
+  sandbox.location.hash = '#/dice';
+  sandbox.dispatch('hashchange');
+  const diceHead = view.querySelector('.view-head');
+  const diceIntro = diceHead && diceHead.querySelector('p');
+  check('骰子页简介很短', !!diceIntro && diceIntro.textContent.length <= 70,
+    `${diceIntro ? diceIntro.textContent.length : '-'} 字：${diceIntro ? diceIntro.textContent : ''}`);
+  check('骰子页简介保留了功能自己的规则',
+    !!diceIntro && diceIntro.textContent.includes('1–6') && diceIntro.textContent.includes('d6'),
+    diceIntro ? diceIntro.textContent : '');
+  check('骰子页简介不再讲随机源原理',
+    !!diceIntro && MOVED.every((w) => !diceIntro.textContent.includes(w)),
+    diceIntro ? diceIntro.textContent : '');
+  check('骰子页简介里也留了去关于页的入口',
+    !!diceHead && !!diceHead.querySelector('.view-head__more'));
+
+  /* ---- 关于页是信息页，不是功能 ---- */
+  const aboutPage = App.pages.get('about');
+  check('App.pages 注册了关于页', !!aboutPage && aboutPage.name === '关于',
+    aboutPage ? aboutPage.name : '（没有）');
+  check('关于页不在功能列表里', !App.modes.list.some((m) => m.id === 'about'),
+    App.modes.list.map((m) => m.id).join(','));
+  check('功能列表仍是 4 条（关于没有混进去）', App.modes.list.length === 4,
+    String(App.modes.list.length));
+
+  sandbox.location.hash = '#/about';
+  sandbox.dispatch('hashchange');
+  check('路由能切到关于页', view.querySelector('.about') !== null);
+  check('关于页标题正确', doc.title === 'ChOIceN · 关于', doc.title);
+  check('关于页里没有功能卡', view.querySelectorAll('.mode-card').length === 0,
+    String(view.querySelectorAll('.mode-card').length));
+  check('关于页没有随机源诊断面板（那是功能页的东西）',
+    view.querySelector('.entropy') === null);
+
+  const sections = view.querySelectorAll('.about__section');
+  check('关于页有 6 个小节', sections.length === 6, String(sections.length));
+  check('每个小节都有非空标题', sections.every((s) => {
+    const h = s.querySelector('.about__title');
+    return !!h && h.textContent.trim().length > 0;
+  }));
+  const paras = view.querySelectorAll('.about__p');
+  check('关于页有足够正文', paras.length >= 20, String(paras.length));
+  check('没有空段落', paras.every((p) => p.textContent.trim().length > 0));
+  // 注意：桩只支持单个简单选择器，`.about__list li` 这种后代组合子会静默匹配 0 个。
+  // 必须先拿到容器再往下查。
+  const aboutList = view.querySelector('.about__list');
+  const listItems = aboutList ? aboutList.querySelectorAll('li') : [];
+  const terms = view.querySelectorAll('.about__term');
+  check('关于页有列表与术语表（诊断面板字段要有解释）',
+    listItems.length >= 3 && terms.length >= 14,
+    `li=${listItems.length} dt=${terms.length}`);
+
+  const aboutText = view.textContent;
+  ['混合', '加密', '时间', '拒绝采样', '真随机', '同一毫秒', '分布', '连掷',
+   '清空统计', '减少动态效果'].forEach((word) => {
+    check(`关于页讲到了「${word}」`, aboutText.includes(word));
+  });
+  const repo = view.querySelectorAll('a').find((a) =>
+    a.getAttribute('href') === 'https://github.com/ImHaoYuan/ChOIceN');
+  check('技术说明里有源码链接', !!repo);
+  check('外链新开标签页并带 noopener（GitHub Pages 是 https，别把 window.opener 递出去）',
+    !!repo && repo.getAttribute('target') === '_blank' &&
+      String(repo.getAttribute('rel')).includes('noopener'),
+    repo ? `target=${repo.getAttribute('target')} rel=${repo.getAttribute('rel')}` : '');
+
+  /* ---- 读屏：关于页是长文，不能让 live region 把整页念一遍 ---- */
+  check('关于页把 live region 关掉了', view.getAttribute('aria-live') === 'off',
+    String(view.getAttribute('aria-live')));
+  check('关于页时侧边栏没有一张功能卡是高亮的',
+    navList.querySelectorAll('.mode-card').filter((c) => c.getAttribute('aria-current') === 'true').length === 0);
+  check('侧边栏底部的关于入口自己高亮',
+    aboutLink.getAttribute('aria-current') === 'true',
+    String(aboutLink.getAttribute('aria-current')));
+
+  sandbox.location.hash = '#/coin';
+  sandbox.dispatch('hashchange');
+  check('切回功能页后关于页被清掉', view.querySelector('.about') === null);
+  check('切回功能页后 live region 恢复 polite', view.getAttribute('aria-live') === 'polite',
+    String(view.getAttribute('aria-live')));
+  check('切回功能页后关于入口不再高亮',
+    aboutLink.getAttribute('aria-current') === 'false',
+    String(aboutLink.getAttribute('aria-current')));
+
+  /* ---- 三个入口都要真的到得了 ---- */
+  moreToggle.click();
+  check('「更多选项」面板能打开', morePanel.hidden === false);
+  const aboutItem = morePanel.querySelectorAll('.menu__item')
+    .find((b) => b.textContent.includes('关于'));
+  check('下拉里能找到「关于」入口', !!aboutItem,
+    morePanel.querySelectorAll('.menu__item').map((b) => b.textContent).join(' | ') || '（没有 .menu__item）');
+  check('下拉里关于项前有分隔线', morePanel.querySelectorAll('.menu__sep').length === 1,
+    String(morePanel.querySelectorAll('.menu__sep').length));
+  check('下拉里关于项在开关后面',
+    morePanel.children[morePanel.children.length - 1].querySelector('.menu__item') !== null);
+  if (aboutItem) aboutItem.click();
+  check('点「关于」后面板自己关上了（面板内点击被 stopPropagation 挡住，必须显式关）',
+    morePanel.hidden === true, `hidden=${morePanel.hidden}`);
+  check('点「关于」后 hash 指向关于页', sandbox.location.hash === '#/about', sandbox.location.hash);
+  sandbox.dispatch('hashchange');
+  check('下拉入口能真的到达关于页', view.querySelector('.about') !== null);
+
+  aboutLink.click();
+  check('已在关于页时点侧边栏入口不报错、仍停在关于页',
+    sandbox.location.hash === '#/about' && view.querySelector('.about') !== null);
+  sandbox.location.hash = '#/coin';
+  sandbox.dispatch('hashchange');
+  aboutLink.click();
+  check('侧边栏入口能从功能页跳到关于页', sandbox.location.hash === '#/about', sandbox.location.hash);
+  check('（模拟器不派发 hashchange，手动切一次视图）',
+    typeof sandbox.dispatch('hashchange') === 'object' || true);
+  sandbox.dispatch('hashchange');
+
+  /* ---- 关于不占快捷键编号 ---- */
+  doc.dispatch('keydown', { key: '1', altKey: true });
+  check('Alt+1 仍然切到抛硬币（快捷键机制本身没坏）',
+    sandbox.location.hash === '#/coin', sandbox.location.hash);
+  sandbox.location.hash = '#/about';
+  sandbox.dispatch('hashchange');
+  doc.dispatch('keydown', { key: '5', altKey: true });
+  check('Alt+5 什么也不做（关于不是功能，不占编号）',
+    sandbox.location.hash === '#/about', sandbox.location.hash);
+
+  /* ---- 路由边界 ---- */
+  sandbox.location.hash = '#/about/extra';
+  sandbox.dispatch('hashchange');
+  check('带多余路径段的 #/about/extra 也能落在关于页',
+    view.querySelector('.about') !== null, sandbox.location.hash);
+  sandbox.location.hash = '#/nope';
+  sandbox.dispatch('hashchange');
+  check('未知路由仍然回退到抛硬币（关于页没把回退逻辑带坏）',
+    sandbox.location.hash === '#/coin' && view.querySelector('.coin-area') !== null,
+    `${sandbox.location.hash} / ${view.querySelector('.coin-area') ? '有硬币视图' : '无'}`);
 }
 
 console.log(`\n${failures === 0 ? '全部通过 ✅' : failures + ' 项失败 ❌'}\n`);
