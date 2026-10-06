@@ -113,6 +113,9 @@
 
      新功能如果也有自己的统计，要在这里加一条；没加的话那个功能页上的按钮是灰的
      ——这是刻意的兜底：不知道该清什么，就别清（见 README 第 8 节）。
+
+     每条的 `confirm` 是确认弹窗里的正文，`done` 是清完后的提示语；
+     弹窗由 ui.confirmDialog 画（网页自带，不依赖浏览器原生对话框）。
      --------------------------------------------------------- */
   const CLEAR_SCOPE = {
     coin: {
@@ -149,7 +152,23 @@
     const scope = clearScopeFor(current);
     // 置灰后正常点不到；这里再挡一次，免得程序化 click() 或旧引用绕过去
     if (!scope) return;
-    if (!global.confirm(scope.confirm)) return;
+    // 只弹窗、不动数据：真正的清空放在「确定」的回调里。
+    // 用网页自带的弹窗而不是浏览器原生确认框 —— 原生框在 Android 壳那类
+    // 内嵌 WebView 里会被静默吞掉，点了「清空统计」等于没反应。
+    ui.confirmDialog({
+      title: '清空' + scope.name + '的统计与历史？',
+      message: scope.confirm,
+      confirmText: '确定清空',
+      onAccept: function () { applyReset(scope); }
+    });
+  }
+
+  /**
+   * 弹窗里点了「确定」之后真正执行的四步。
+   * 刻意保持同步（不用 Promise/async）：冒烟测试点完「确定」就要立刻断言，
+   * 而且 render() 会重建视图，必须在这轮回调里跑完。
+   */
+  function applyReset(scope) {
     scope.clear();
     App.rng.reseed();
     render();
@@ -167,7 +186,7 @@
     settings: settings,
     /** 各功能可复用顶部栏同款的主题切换控件 */
     themeControl: createThemeControl,
-    /** 各功能若自建了「清空统计」入口，直接调用它 */
+    /** 各功能若自建了「清空统计」入口，直接调用它（会先弹确认弹窗） */
     resetStats: resetStatsNow,
     /** 订阅偏好变化（返回取消订阅函数）；顶部栏的开关改动会广播给当前视图 */
     onSetting: onSettingChange,

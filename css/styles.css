@@ -26,6 +26,13 @@
   --surface:       rgba(255, 255, 255, 0.045);
   --surface-strong:rgba(255, 255, 255, 0.075);
   --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.022));
+  /* 浮层（下拉面板）的不透明底板。--surface-panel 只是 2%~6% 的白，
+     单独当背景用会让背后的正文透出来；顶部栏可以直接用它，是因为它自带
+     backdrop-filter。理由详见 .menu__panel 的注释。 */
+  --panel-solid:   #10141f;
+  /* 模态弹窗的背板遮罩。只压暗正文、不承担「不透字」的职责，
+     那是卡片自己的 --panel-solid 干的（见 .dialog__card）。 */
+  --scrim:         rgba(0, 0, 0, 0.62);
   --border:        rgba(255, 255, 255, 0.10);
   --border-strong: rgba(255, 255, 255, 0.18);
   /* 供币面描边等用途的白色/黑色半透明层，浅色模式下要反过来 */
@@ -108,6 +115,9 @@
   --surface:       rgba(19, 26, 46, 0.040);
   --surface-strong:rgba(19, 26, 46, 0.075);
   --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.62));
+  --panel-solid:   #ffffff;
+  /* 浅色下遮罩不能纯黑压太重：整个页面本来就是亮的，0.38 的深蓝已经够分神了 */
+  --scrim:         rgba(19, 26, 46, 0.38);
   --border:        rgba(19, 26, 46, 0.12);
   --border-strong: rgba(19, 26, 46, 0.22);
   --ink-weak:      rgba(0, 0, 0, 0.05);
@@ -490,6 +500,58 @@ code {
   transition: opacity .26s, transform .26s var(--ease-out);
 }
 .toast[data-show="true"] { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---- 确认弹窗（网页自带，不用浏览器原生对话框） ----
+   卡片和 .menu__panel 是同一套浮层做法：不透明底板 + 半透明高光渐变。
+   只写 background: var(--surface-panel) 会让背后的正文透出来（浅色主题下最明显），
+   弹窗还带一层遮罩，正文其实是压暗的，透字会更难看。
+   层级排在 toast(60) 之上：确认期间提示条不该盖住问题本身。 */
+.dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.dialog[hidden] { display: none; }
+
+.dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+}
+
+.dialog__card {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 22px 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-strong);
+  background-color: var(--panel-solid);
+  background-image: var(--surface-panel);
+  box-shadow: var(--shadow-deep);
+}
+
+.dialog__title { font-size: 17px; letter-spacing: .3px; }
+.dialog__message {
+  margin-top: 10px;
+  color: var(--text-soft);
+  font-size: 13.5px;
+  line-height: 1.85;
+  /* 中文长句没有空格，必须允许在任意位置断行（同 .view-head p） */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.dialog__actions {
+  margin-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+/* 两个按钮等宽：窄屏换行时不会一宽一窄地错位 */
+.dialog__btn { min-width: 104px; }
 
 /* ===== 6. 抛硬币舞台 ===== */
 .stage {
@@ -1171,7 +1233,14 @@ code {
   padding: 12px;
   border-radius: var(--radius);
   border: 1px solid var(--border-strong);
-  background: var(--surface-panel);
+  /* 这个面板是浮在正文之上的，必须有不透明底板。
+     只写 background: var(--surface-panel) 会踩坑：那是一条 2%~6% 白（浅色主题下
+     92%→62% 白）的半透明渐变，单用等于没底色，背后的正文会直接透出来 ——
+     窄屏上面板正好压在硬币/骰子上，白色面板里能看到后面的字。
+     所以这里用「不透明底板 + 半透明高光渐变」两层：
+     既保住原来的玻璃质感，又不会透字。 */
+  background-color: var(--panel-solid);
+  background-image: var(--surface-panel);
   box-shadow: var(--shadow-deep);
 }
 .menu__panel[hidden] { display: none; }

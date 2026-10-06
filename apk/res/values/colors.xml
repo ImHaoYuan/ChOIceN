@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 与 index.html 的 <meta name="theme-color"> 一致 -->
+    <color name="bg">#FF0B0F1A</color>
+    <!-- 与 favicon 里的金币同色 -->
+    <color name="coin">#FFF0C34D</color>
+    <color name="coin_edge">#FFA87C1C</color>
+</resources>

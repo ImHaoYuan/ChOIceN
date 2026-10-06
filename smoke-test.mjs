@@ -4,6 +4,8 @@
      · 页面能挂载（无运行时异常）
      · 点击「抛一次」能产生 heads/tails 结果并写入统计与历史
      · 路由切换 / 占位功能可渲染
+     · 「清空统计」的网页自带确认弹窗：弹窗 / 确定 / 取消 / Esc / 点背板，
+       并用源码静态断言确认页面里已经没有原生对话框
    运行： node smoke-test.mjs
    ============================================================= */
 import fs from 'node:fs';
@@ -14,6 +16,10 @@ import { performance } from 'node:perf_hooks';
 const ROOT = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 
 /* ---------------- 最小 DOM 实现 ---------------- */
+// DOM 桩没有真实焦点，只记下「谁最后被 focus() 过」，
+// 供确认弹窗那几条无障碍断言使用（打开时进弹窗、关闭后还给触发按钮）。
+let focusedEl = null;
+
 class ClassList {
   constructor(el) { this.el = el; this.set = new Set(); }
   add(...c) { c.forEach((x) => x && this.set.add(x)); this.#sync(); }
@@ -98,7 +104,7 @@ class Element {
   querySelector(sel) { return findBySelector(this, sel)[0] || null; }
   get offsetWidth() { return 100; }
   scrollIntoView() {}
-  focus() {}
+  focus() { focusedEl = this; }
   walk(fn) { fn(this); this.children.forEach((c) => c.walk && c.walk(fn)); }
 }
 
@@ -191,6 +197,9 @@ function makeDocument() {
   registry.moreMenu.appendChild(registry.morePanel);
   doc.body = new Element('body');
   doc.head = new Element('head');
+  // 真实浏览器里 activeElement 由浏览器维护（只读）；这里给一个可写的桩，
+  // 测试靠它模拟「点按钮时焦点就在按钮上」，弹窗关闭后才有焦点可还。
+  doc.activeElement = null;
   // 主题切换会同步浏览器地址栏配色用的 meta
   doc.head.appendChild(Object.assign(new Element('meta'), { name: 'theme-color' }));
   doc.querySelector = Element.prototype.querySelector.bind(doc.head);
@@ -256,8 +265,6 @@ const sandbox = {
       return arr;
     }
   },
-  confirm: () => true,
-  alert: () => {},
   setTimeout: (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; },
   clearTimeout: (id) => clearTimeout(id),
   setInterval: (fn, ms) => setInterval(fn, ms),
@@ -712,9 +719,16 @@ const cleared = App.store.getStats();
 check('统计已清空', cleared.total === 0 && cleared.heads === 0 && cleared.tails === 0);
 check('历史已清空', App.store.getHistory().length === 0);
 
-// 「清空统计」按钮已从侧边栏移到顶部栏，而且只清「当前这个功能」的记录
+// 「清空统计」按钮已从侧边栏移到顶部栏，而且只清「当前这个功能」的记录。
+// 它的二次确认改成了网页自带的弹窗（ui.confirmDialog），所以这里把
+// 「点按钮 / 点确定 / 点取消 / 按 Esc / 点背板」几条路径都走一遍，
+// 最后再用源码静态断言钉死「页面里不再有原生对话框」。
 {
   const R = doc._registry;
+  const body = doc.body;
+  /** 弹窗根节点。关闭后必须从 DOM 里消失 —— Android 壳靠这个判断返回键已被消费 */
+  const dialog = () => body.querySelector('#confirmDialog');
+  const inDialog = (sel) => body.querySelector(sel);
   const seed = () => {
     App.store.record('heads');
     App.store.pushHistory({ face: 'heads', at: Date.now() });
@@ -724,27 +738,91 @@ check('历史已清空', App.store.getHistory().length === 0);
   const coin = () => [App.store.getStats().total, App.store.getHistory().length];
   const dice = () => [App.store.getDiceStats().rolls, App.store.getDiceHistory().length];
   const go = (hash) => { sandbox.location.hash = hash; sandbox.dispatch('hashchange'); };
+  /*
+   * 点顶部栏那个按钮。真实浏览器里此刻焦点就在这按钮上（关闭后要还给它），
+   * 桩里得手动摆好 —— doc.activeElement 在桩里只是个普通属性。
+   */
+  const openDialog = () => { doc.activeElement = R.resetStats; R.resetStats.click(); };
 
-  /* ---- 抛硬币页：只清抛硬币的 ---- */
+  /* ---- ① 抛硬币页：点按钮只弹窗，统计一动不动 ---- */
   go('#/coin');
   seed();
   check('按钮点击前抛硬币与掷骰子都有数据',
     coin()[0] === 1 && dice()[0] === 1, `coin=${coin()[0]} dice=${dice()[0]}`);
-  R.resetStats.click();
-  check('抛硬币页点「清空统计」清掉了抛硬币的记录',
+  openDialog();
+  check('点「清空统计」弹的是网页自带的弹窗', dialog() !== null);
+  const card = inDialog('#confirmDialogCard');
+  check('弹窗是标准模态：role="dialog" + aria-modal="true"',
+    !!card && card.getAttribute('role') === 'dialog' &&
+    card.getAttribute('aria-modal') === 'true',
+    card ? `role=${card.getAttribute('role')} aria-modal=${card.getAttribute('aria-modal')}` : '（没有弹窗）');
+  check('标题与描述用 aria-labelledby / aria-describedby 关联，且都有内容',
+    !!card && card.getAttribute('aria-labelledby') === 'confirmDialogTitle' &&
+    card.getAttribute('aria-describedby') === 'confirmDialogDesc' &&
+    inDialog('#confirmDialogTitle').textContent.trim().length > 0 &&
+    inDialog('#confirmDialogDesc').textContent.trim().length > 0);
+  check('弹窗标题点明清的是哪一边',
+    inDialog('#confirmDialogTitle').textContent.indexOf('抛硬币') > -1,
+    inDialog('#confirmDialogTitle').textContent);
+  check('弹窗正文用的就是 CLEAR_SCOPE 里那句确认文案（scope.confirm）',
+    inDialog('#confirmDialogDesc').textContent.indexOf('清空抛硬币的统计与历史') > -1,
+    inDialog('#confirmDialogDesc').textContent);
+  check('打开时焦点落在安全的「取消」上（破坏性操作不把回车交给「确定」）',
+    focusedEl === inDialog('#confirmDialogCancel'), focusedEl ? (focusedEl.id || focusedEl.tagName) : '（没聚焦）');
+  check('只是弹窗，还没清任何记录',
+    coin()[0] === 1 && coin()[1] === 1 && dice()[0] === 1 && dice()[1] === 1,
+    `coin=${coin()} dice=${dice()}`);
+
+  /* ---- ② 点「确定」：同步清空 + scope.done 提示 + 关窗 + 还焦点 ---- */
+  inDialog('#confirmDialogOk').click();
+  check('点「确定」后抛硬币的记录才真的清空',
     coin()[0] === 0 && coin()[1] === 0, `total=${coin()[0]} history=${coin()[1]}`);
-  check('抛硬币页清空不碰掷骰子的记录',
+  check('点「确定」不碰掷骰子的记录',
     dice()[0] === 1 && dice()[1] === 1, `dice rolls=${dice()[0]} history=${dice()[1]}`);
-  check('提示语说明了清的是哪一边',
-    R.toast.textContent.indexOf('抛硬币') > -1, R.toast.textContent);
+  check('提示语用的就是 CLEAR_SCOPE 的 done 文案（scope.done）',
+    R.toast.textContent === '抛硬币的统计与历史已清空', R.toast.textContent);
+  check('「确定」后弹窗从 DOM 里移除', dialog() === null);
+  check('关闭后焦点还给触发它的按钮',
+    focusedEl === R.resetStats, focusedEl ? (focusedEl.id || focusedEl.tagName) : '（没聚焦）');
   check('按钮 title 说明清的是哪一边',
     R.resetStats.title.indexOf('抛硬币') > -1, R.resetStats.title);
 
-  /* ---- 掷骰子页：只清掷骰子的 ---- */
+  /* ---- ③ 点「取消」：只关闭，什么都不清 ---- */
+  seed();                                   // coin=(1,1) dice=(2,2)
+  openDialog();
+  inDialog('#confirmDialogCancel').click();
+  check('点「取消」后弹窗关闭', dialog() === null);
+  check('点「取消」一条记录都没清',
+    coin()[0] === 1 && coin()[1] === 1 && dice()[0] === 2 && dice()[1] === 2,
+    `coin=${coin()} dice=${dice()}`);
+  check('「取消」后焦点也还给触发它的按钮', focusedEl === R.resetStats);
+
+  /* ---- ④ 按 Esc：同上（Android 壳的返回键复用的就是这个接口） ---- */
+  openDialog();
+  doc.dispatch('keydown', { key: 'Escape' });
+  check('按 Esc 能关掉弹窗（在 document 上派发即可，不必先聚焦弹窗）', dialog() === null);
+  check('按 Esc 同样一条记录都没清',
+    coin()[0] === 1 && coin()[1] === 1 && dice()[0] === 2 && dice()[1] === 2,
+    `coin=${coin()} dice=${dice()}`);
+  check('Esc 关掉后焦点也还给触发它的按钮', focusedEl === R.resetStats);
+  check('Esc 的监听在关闭时已摘掉（再按一次不会出错）',
+    (() => { doc.dispatch('keydown', { key: 'Escape' }); return dialog() === null; })());
+
+  /* ---- 点背板：也只关闭 ---- */
+  openDialog();
+  inDialog('.dialog__backdrop').click();
+  check('点背板只关闭弹窗，不清任何记录',
+    dialog() === null && coin()[0] === 1 && dice()[0] === 2,
+    `coin=${coin()} dice=${dice()}`);
+
+  /* ---- 掷骰子页：清的是掷骰子那份，文案也跟着换 ---- */
   go('#/dice');
-  seed();
-  R.resetStats.click();
-  check('掷骰子页点「清空统计」清掉了掷骰子的记录',
+  openDialog();
+  check('掷骰子页的确认文案换成了它自己那份',
+    inDialog('#confirmDialogDesc').textContent.indexOf('清空掷骰子的统计与历史') > -1,
+    inDialog('#confirmDialogDesc').textContent);
+  inDialog('#confirmDialogOk').click();
+  check('掷骰子页点「确定」清掉了掷骰子的记录',
     dice()[0] === 0 && dice()[1] === 0, `rolls=${dice()[0]} history=${dice()[1]}`);
   check('掷骰子页清空不碰抛硬币的记录',
     coin()[0] === 1 && coin()[1] === 1, `coin=${coin()[0]} history=${coin()[1]}`);
@@ -768,12 +846,34 @@ check('历史已清空', App.store.getHistory().length === 0);
     coin()[0] === beforeCoin[0] && coin()[1] === beforeCoin[1] &&
     dice()[0] === beforeDice[0] && dice()[1] === beforeDice[1],
     `coin=${coin()} dice=${dice()}（点击前 coin=${beforeCoin} dice=${beforeDice}）`);
+  check('置灰状态下连弹窗都不会弹（挡在第一步）', dialog() === null);
 
   go('#/coin');
   check('回到功能页后按钮恢复可用', R.resetStats.disabled === false,
     `disabled=${R.resetStats.disabled}`);
   check('恢复可用后 aria-disabled 也复位',
     R.resetStats.getAttribute('aria-disabled') === 'false');
+
+  /* ---- 源码静态断言：原生对话框一个都不许剩 ---- */
+  {
+    /*
+     * 为什么运行时断言之外还要卡源码：原生对话框在 Node 桩里根本不会被调用，
+     * 「点了没反应」这类事故在无浏览器测试里是隐形的；而且必须连测试桩里的
+     * 替身（桩里原来那条「永远回答 true」的确认桩）一起清掉 —— 留着它，页面哪天退回
+     * window.confirm 也照样全绿（同 README 第 3.1 节 rngSource 的两头卡）。
+     */
+    const NATIVE = /(?:confirm|alert|prompt)\s*\(/;
+    const offenders = [];
+    for (const f of fs.readdirSync(path.join(ROOT, 'js'))) {
+      if (!f.endsWith('.js')) continue;
+      if (NATIVE.test(fs.readFileSync(path.join(ROOT, 'js', f), 'utf8'))) offenders.push('js/' + f);
+    }
+    if (NATIVE.test(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8'))) offenders.push('index.html');
+    check('js/*.js 与 index.html 里都没有原生对话框调用（confirm / alert / prompt）',
+      offenders.length === 0, offenders.join(', ') || '一个都没有');
+    check('本文件的 DOM 桩里也没有原生对话框的替身',
+      !/\b(?:confirm|alert|prompt)\s*:/.test(fs.readFileSync(new URL(import.meta.url), 'utf8')));
+  }
 
   App.store.resetStats();
   App.store.resetDiceStats();

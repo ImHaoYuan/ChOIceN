@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自适应图标的前景层（API 26+）。金币形状取自 index.html 里的 favicon：
+  <circle cx="16" cy="16" r="13" fill="#f0c34d" stroke="#a87c1c" stroke-width="2"/>
+  换算到 108×108 视口，并缩到 72×72 的安全区以内（半径 33 + 描边 2.5 < 36）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="@color/coin"
+        android:strokeColor="@color/coin_edge"
+        android:strokeWidth="5"
+        android:pathData="M54,21 A33,33 0 1,0 54,87 A33,33 0 1,0 54,21 Z" />
+</vector>
