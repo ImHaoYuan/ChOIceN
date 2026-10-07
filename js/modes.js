@@ -35,7 +35,7 @@
     /*
      * 抛掷动画的两档参数：
      *   - 单次抛掷用原速（2500ms / 5–8 圈），保持「抛起来、慢慢落定」的观感；
-     *   - 连抛 10 次用加速档（850ms / 3–4 圈），否则 10 次要点 27 秒以上，
+     *   - 连抛十次用加速档（850ms / 3–4 圈），否则十次要点 27 秒以上，
      *     而且中间还有 220ms 停顿，等待感很强。
      * 圈数要跟着时长一起降：时长缩短后若还转 8 圈，角速度过高会糊成一片白，
      * 反而看不清翻转。慢动作（slowMotion）开启时仍会乘上系数，尊重用户选择。
@@ -46,7 +46,7 @@
 
     /* ---------- 结构 ---------- */
     const statusMain = el('div.stage__status-main', { text: '准备好了吗？' });
-    const statusSub = el('div.stage__status-sub', { text: '点击「抛一次」，或直接按空格键' });
+    const statusSub = el('div.stage__status-sub', { text: '点击硬币或「抛一次」，也可按空格键' });
     const statusBox = el('div.stage__status', { dataset: { state: 'idle' } }, [statusMain, statusSub]);
 
     const toss = el('div.toss');
@@ -60,7 +60,7 @@
       el('span', { text: '抛一次' }),
       el('kbd', { text: 'Space' })
     ]);
-    const btnTen = el('button.btn.btn--mid', { type: 'button', text: '连抛 10 次' });
+    const btnTen = el('button.btn.btn--mid', { type: 'button', text: '连抛十次' });
     const btnReset = el('button.btn.btn--sm', { type: 'button', text: '重置硬币' });
 
     const stage = el('section.panel.panel--stage', [
@@ -123,7 +123,7 @@
         el('h1', [el('span.view-head__badge', { text: '🪙' }), '抛硬币']),
         // 简介只留这个功能自己的事；随机源原理、动画取舍等长文一律放 #/about
         el('p', [
-          '正反两面，一抛定夺。支持连抛 10 次，并累计正反占比与最近结果。',
+          '正反两面，一抛定夺。支持连抛十次，并累计正反占比与最近结果。',
           el('a.view-head__more', { href: '#/about', text: '随机源与完整说明 →' })
         ])
       ]),
@@ -243,17 +243,24 @@
       const seconds = ((Date.now() - t0) / 1000).toFixed(1);
       setState('idle', '连抛完成', '共 ' + times + ' 次，用时 ' + seconds + ' 秒，结果已记入统计');
       global.setTimeout(function () {
-        if (!busy) setState('idle', '准备好了吗？', '点击「抛一次」，或直接按空格键');
+        if (!busy) setState('idle', '准备好了吗？', '点击硬币或「抛一次」，也可按空格键');
       }, 2200);
       setBusy(false);
     }
 
     btnFlip.addEventListener('click', doFlip);
     btnTen.addEventListener('click', function () { doFlipMany(10); });
+
+    /* 点硬币本身就是「抛一次」。
+       手机网页上硬币比按钮好按，用户的第一反应也是去点那枚硬币，所以这里补一个入口。
+       判定刻意放宽：命中范围不只覆盖硬币本体，CSS 里 .coin-area::after 还向外扩了一圈
+       （见 css/styles.css 的热区注释），手指点偏一点也算数。
+       抛掷中重复点击由 doFlip 里的 busy 挡掉，不会叠出第二次抛掷。 */
+    coin.el.addEventListener('click', function () { doFlip(); });
     btnReset.addEventListener('click', function () {
       if (busy) return;
       coin.show('heads');
-      setState('idle', '准备好了吗？', '点击「抛一次」，或直接按空格键');
+      setState('idle', '准备好了吗？', '点击硬币或「抛一次」，也可按空格键');
       mFace.textContent = '—';
       mFace.className = 'metric__value';
       mTime.textContent = '—';
@@ -277,7 +284,7 @@
     renderHistory();
     entropy.render();
     if (!history.length) {
-      setState('idle', '准备好了吗？', '点击「抛一次」，或直接按空格键');
+      setState('idle', '准备好了吗？', '点击硬币或「抛一次」，也可按空格键');
     } else {
       const last = history[0];
       const face = typeof last === 'string' ? last : last.face;
@@ -381,7 +388,7 @@
 
     /* ---------- 舞台 ---------- */
     const statusMain = el('div.stage__status-main', { text: '准备好了吗？' });
-    const statusSub = el('div.stage__status-sub', { text: '点击「掷一次」，或直接按空格键' });
+    const statusSub = el('div.stage__status-sub', { text: '点击骰子或「掷一次」，也可按空格键' });
     const statusBox = el('div.stage__status', { dataset: { state: 'idle' } }, [statusMain, statusSub]);
 
     const btnRoll = el('button.btn.btn--primary', { type: 'button' }, [
@@ -591,7 +598,7 @@
       mFaces.textContent = '—';
       mSum.textContent = '—';
       mSum.className = 'metric__value';
-      setState('idle', '准备好了吗？', '点击「掷一次」，或直接按空格键');
+      setState('idle', '准备好了吗？', '点击骰子或「掷一次」，也可按空格键');
     }
 
     /** 记录一次结果，并刷新统计 / 分布 / 历史 / 随机源面板 */
@@ -633,6 +640,12 @@
     }
 
     btnRoll.addEventListener('click', doRoll);
+
+    /* 点骰子也可以掷：整条骰子托盘都是热区。
+       骰子方块本身小、彼此之间还有间距，只把命中区画在方块上很容易点空，
+       所以把托盘（含四周留白）整片都算作「点了骰子」，点偏、点到两颗之间都算。
+       掷骰中重复点击由 doRoll 里的 busy 挡掉。 */
+    dice.el.addEventListener('click', function () { doRoll(); });
     btnReset.addEventListener('click', function () {
       if (busy) return;
       dice.clear();

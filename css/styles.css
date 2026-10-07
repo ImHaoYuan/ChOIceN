@@ -618,6 +618,26 @@ code {
   height: var(--size);
   /* 这里不再需要 perspective / preserve-3d：硬币改用 2D 透视模拟，
      原因见下方 .coin 的注释。 */
+
+  /* 点硬币本身就是「抛一次」（见 js/modes.js）。
+     cursor: pointer 不只是视觉提示：老版 iOS Safari 只在「可点击」的元素上派发 click，
+     而带 cursor: pointer（会继承给硬币的各个图层）正是它认的那种；
+     另外关掉双击缩放延迟与点击高亮——反馈由立刻开始的翻转动画给，
+     而高亮会在这个方形盒子上闪出一块与圆形硬币对不上的灰块。 */
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 硬币热区比本体大一圈：手指点偏一点也算「点了硬币」。
+   空的透明伪元素只负责撑大命中范围 —— 伪元素不是事件目标，
+   事件仍然落在 .coin-area 上，所以 JS 里只需要挂一个监听。
+   inset 的百分比按 .coin-area 自己的尺寸算（它是这个绝对定位元素的包含块）。 */
+.coin-area::after {
+  content: "";
+  position: absolute;
+  inset: -15%;
+  border-radius: 50%;
 }
 
 .coin-shadow {
@@ -814,6 +834,14 @@ code {
      否则会被 .panel--stage 的 overflow:hidden 裁掉。 */
   padding: clamp(30px, 5vw, 40px) 6px 18px;
   min-height: calc(var(--die-size) + 58px);
+
+  /* 点骰子也可以掷：整条托盘都是热区（见 js/modes.js）。
+     骰子小、彼此还有间距，只把命中区画在方块上很容易点空，
+     所以连四周留白一起算，点偏、点到两颗之间都算数。
+     cursor: pointer 兼作老版 iOS Safari 的「可点击」判定（会继承给每颗骰子）。 */
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .die-slot {

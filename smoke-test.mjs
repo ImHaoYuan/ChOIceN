@@ -551,25 +551,64 @@ check('结果文案已更新', /正面|反面/.test(statusText), statusText);
 for (let i = 0; i < 3; i++) { flipBtn.click(); await sleep(3100); }
 check('连续单次抛掷累计 5 次', App.store.getStats().total === 5, `total=${App.store.getStats().total}`);
 
+/*
+ * 3.5 点硬币本身就是「抛一次」。
+ * 手机网页上硬币比按钮好按，用户的第一反应也是去点那枚硬币，所以要守住两条：
+ *   ① 点硬币真的会抛，而不只是按钮的别名；
+ *   ② 抛掷中重复点不会叠出第二次（doFlip 里的 busy）。
+ * 桩里没有冒泡（Element.dispatch 只调自己身上的监听），所以必须直接点 .coin-area：
+ * 真实浏览器里点硬币的任何一个图层都会冒泡到它身上。
+ */
+{
+  const coinArea = view.querySelector('.coin-area');
+  check('找到硬币热区', !!coinArea);
+  const beforeClick = App.store.getStats().total;
+  if (coinArea) coinArea.click();
+  check('点硬币立刻进入抛掷中（按钮同步禁用）', flipBtn.disabled === true);
+  if (coinArea) coinArea.click();          // 抛掷中再点一次：应该被 busy 挡掉
+  await sleep(4300);
+  check('点硬币记一次结果', App.store.getStats().total === beforeClick + 1,
+    `total=${App.store.getStats().total}（期望 ${beforeClick + 1}）`);
+  check('抛掷中重复点硬币不会多记一次（busy 生效）',
+    App.store.getStats().total === beforeClick + 1);
+  check('落定后按钮恢复可用', flipBtn.disabled === false);
+
+  /*
+   * 「热区比本体大一圈」是纯布局行为：DOM 桩里没有布局，运行时量不出来，
+   * 所以用源码静态断言钉住那条向外扩的规则 —— 否则日后有人把它删掉，
+   * 运行时断言照样全绿，而手机上又要点不准了。
+   */
+  const cssText = fs.readFileSync(path.join(ROOT, 'css', 'styles.css'), 'utf8');
+  check('硬币热区有向外扩一圈的规则（.coin-area::after 的负 inset）',
+    /\.coin-area::after\s*\{[^}]*inset:\s*-\d/.test(cssText));
+  check('硬币与骰子热区都关掉了移动端双击缩放延迟与点击高亮',
+    (cssText.match(/touch-action:\s*manipulation/g) || []).length >= 2 &&
+    (cssText.match(/-webkit-tap-highlight-color:\s*transparent/g) || []).length >= 2);
+}
+
 console.log('\n[4] 连抛与统计展示');
-const tenBtn = view.querySelectorAll('.btn').find((b) => b.textContent.includes('连抛'));
-check('找到「连抛 10 次」按钮', !!tenBtn);
+const tenBtn = view.querySelectorAll('.btn').find((b) => b.textContent.includes('连抛十次'));
+check('找到「连抛十次」按钮', !!tenBtn);
+check('按钮文案用的是「连抛十次」，不再是「连抛 10 次」',
+  !view.querySelectorAll('.btn').some((b) => /连抛\s*10\s*次/.test(b.textContent)),
+  view.querySelectorAll('.btn').map((b) => b.textContent.trim()).join(' | '));
 if (tenBtn) {
   const t0 = Date.now();
   tenBtn.click();
   // 加速后 10 次约 10 秒；原速需要 27 秒以上，所以这里最多等 40 秒
+  // 起点是 6 次：3.1–3.4 共 5 次，加上 3.5 点硬币那一次
   let waited = 0;
-  while (App.store.getStats().total < 15 && waited < 40000) {
+  while (App.store.getStats().total < 16 && waited < 40000) {
     await sleep(200);
     waited += 200;
   }
   const took = Date.now() - t0;
   const s2 = App.store.getStats();
-  check('连抛 10 次全部完成', s2.total === 15, `total=${s2.total} 用时=${took}ms`);
+  check('连抛十次全部完成', s2.total === 16, `total=${s2.total} 用时=${took}ms`);
   check('连抛动画已加速（明显快于原速 27s）', took < 20000, `${took}ms`);
   check('连抛不是瞬间完成（动画确实播完了）', took > 4000, `${took}ms`);
   check('正 + 反 = 总数', s2.heads + s2.tails === s2.total);
-  check('历史长度 15', App.store.getHistory().length === 15);
+  check('历史长度 16', App.store.getHistory().length === 16);
   check('两种结果都出现过（不会恒定一面）', s2.heads > 0 && s2.tails > 0,
     `heads=${s2.heads} tails=${s2.tails}`);
 }
@@ -1099,7 +1138,7 @@ console.log('\n[9] 掷骰子');
     actionBtns[0].textContent.includes('掷一次') &&
     actionBtns[1].textContent.includes('重置骰子'),
     actionBtns.map((b) => b.textContent.trim()).join(' | ') || '（没找到）');
-  check('骰子页不再有「连掷」按钮（按需求移除，硬币页的「连抛 10 次」不受影响）',
+  check('骰子页不再有「连掷」按钮（按需求移除，硬币页的「连抛十次」不受影响）',
     !view.querySelectorAll('.btn').some((b) => b.textContent.includes('连掷')),
     view.querySelectorAll('.btn').map((b) => b.textContent.trim()).join(' | '));
 
@@ -1211,6 +1250,31 @@ console.log('\n[9] 掷骰子');
   check('重置不清统计', App.store.getDiceStats().rolls === 2,
     String(App.store.getDiceStats().rolls));
 
+  /* ---- 点骰子本身也能掷：整条托盘都是热区（手机网页的主要入口） ---- */
+  {
+    const tray = view.querySelector('.dice-tray');
+    check('找到骰子托盘热区', !!tray);
+    const rollsBefore = App.store.getDiceStats().rolls;
+    if (tray) tray.click();
+    check('点骰子立刻进入掷骰中（按钮同步禁用）', rollBtn.disabled === true);
+    if (tray) tray.click();                // 掷骰中再点一次：应该被 busy 挡掉
+    await waitFor(() => !dice.isRolling());
+    await sleep(40);
+    check('点骰子记一次掷骰', App.store.getDiceStats().rolls === rollsBefore + 1,
+      `rolls=${App.store.getDiceStats().rolls}（期望 ${rollsBefore + 1}）`);
+    check('掷骰中重复点骰子不会多记一次（busy 生效）',
+      App.store.getDiceStats().rolls === rollsBefore + 1);
+    check('落定后按钮恢复可用', rollBtn.disabled === false);
+    check('点出来的点数落在当前面数范围内',
+      dice.getValues().every((v) => v >= 1 && v <= dice.getFaces()),
+      JSON.stringify(dice.getValues()));
+    // 同上：热区是纯布局行为，桩里量不出来，用源码静态断言钉住
+    const cssText = fs.readFileSync(path.join(ROOT, 'css', 'styles.css'), 'utf8');
+    check('骰子托盘热区关掉了移动端双击缩放延迟与点击高亮',
+      /\.dice-tray\s*\{[^}]*touch-action:\s*manipulation/.test(cssText) &&
+      /\.dice-tray\s*\{[^}]*webkit-tap-highlight-color:\s*transparent/.test(cssText));
+  }
+
   /* ---- 慢动作联动 + 销毁必须退订 ---- */
   const diceA = sandbox.__dice;
   check('初始速度系数为 1', diceA.getSpeedFactor() === 1, String(diceA.getSpeedFactor()));
@@ -1223,8 +1287,8 @@ console.log('\n[9] 掷骰子');
   sandbox.location.hash = '#/coin';
   sandbox.dispatch('hashchange');
   check('切回抛硬币视图', view.querySelector('.coin-area') !== null);
-  check('硬币页的「连抛 10 次」还在（只移除了骰子那边的连掷）',
-    view.querySelectorAll('.btn').some((b) => b.textContent.includes('连抛 10 次')),
+  check('硬币页的「连抛十次」还在（只移除了骰子那边的连掷）',
+    view.querySelectorAll('.btn').some((b) => b.textContent.includes('连抛十次')),
     view.querySelectorAll('.btn').map((b) => b.textContent.trim()).join(' | '));
   slowInput.checked = false;
   slowInput.dispatch('change');
